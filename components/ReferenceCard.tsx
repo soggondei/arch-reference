@@ -1,0 +1,98 @@
+'use client';
+
+import { Reference, Collection, REF_TYPE_LABEL, REF_TYPE_COLOR, RefType } from '@/lib/types';
+import TagBadge from './TagBadge';
+import Link from 'next/link';
+
+interface ReferenceCardProps {
+  ref_: Reference;
+  collections: Collection[];
+  onDelete: (id: string) => void;
+}
+
+export default function ReferenceCard({ ref_, collections, onDelete }: ReferenceCardProps) {
+  const allTags = [
+    ...ref_.tags.program,
+    ...ref_.tags.material,
+    ...ref_.tags.mass,
+    ref_.tags.scale,
+    ref_.tags.region,
+  ].filter(Boolean);
+
+  const cardCollections = collections.filter(c => ref_.collectionIds.includes(c.id));
+
+  return (
+    <div className="group relative bg-white rounded-xl overflow-hidden border border-zinc-100 hover:border-zinc-300 hover:shadow-lg transition-all duration-200">
+      <Link href={`/reference/${ref_.id}`}>
+        <div className="relative aspect-[4/3] bg-zinc-50 overflow-hidden">
+          {ref_.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={ref_.imageUrl}
+              alt={ref_.title}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-zinc-300">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <polyline points="21 15 16 10 5 21" />
+              </svg>
+            </div>
+          )}
+          {ref_.refType && (
+            <span
+              className="absolute top-2 left-2 text-xs font-semibold text-white px-1.5 py-0.5 rounded shadow"
+              style={{ backgroundColor: REF_TYPE_COLOR[ref_.refType as RefType] }}
+            >
+              {REF_TYPE_LABEL[ref_.refType as RefType]}
+            </span>
+          )}
+          {cardCollections.length > 0 && (
+            <div className={`absolute ${ref_.refType ? 'top-8' : 'top-2'} left-2 flex gap-1`}>
+              {cardCollections.map(c => (
+                <span
+                  key={c.id}
+                  className="w-2.5 h-2.5 rounded-full border-2 border-white shadow"
+                  style={{ backgroundColor: c.color }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </Link>
+
+      <div className="p-3">
+        <Link href={`/reference/${ref_.id}`}>
+          <h3 className="font-semibold text-zinc-900 text-sm leading-tight mb-1 hover:text-zinc-600 truncate">
+            {ref_.title}
+          </h3>
+        </Link>
+
+        {(ref_.architect || ref_.year) && (
+          <p className="text-xs text-zinc-400 mb-2">
+            {[ref_.architect, ref_.year].filter(Boolean).join(' · ')}
+          </p>
+        )}
+
+        <div className="flex flex-wrap gap-1">
+          {allTags.slice(0, 4).map(tag => (
+            <TagBadge key={tag} label={tag} />
+          ))}
+          {allTags.length > 4 && (
+            <span className="text-xs text-zinc-400">+{allTags.length - 4}</span>
+          )}
+        </div>
+      </div>
+
+      <button
+        onClick={() => onDelete(ref_.id)}
+        className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 text-zinc-500 hover:text-red-500 hover:bg-white shadow opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-sm"
+        title="삭제"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
