@@ -218,8 +218,8 @@ export default function SeoulImportPage() {
           </svg>
           <p className="text-xs text-zinc-500 leading-relaxed">
             <span className="font-semibold text-zinc-700">서울시 설계공모 ARCHIVING 탭</span> 전체 데이터를 불러옵니다.
-            연면적·설계비는 현재 서울시 API에서 데이터를 제공하는 항목에만 표시됩니다.
-            총 403건 기준 약 1~2분 소요됩니다.
+            연면적·설계비는 서울시 API 또는 scorer.co.kr 교차 매핑으로 자동 보완됩니다.
+            Scorer 인덱스 첫 빌드 시 약 1분 추가 소요되며, 이후 24시간 캐싱됩니다.
           </p>
         </div>
 
@@ -421,7 +421,7 @@ export default function SeoulImportPage() {
                         )}
 
                         {/* 연도 · 연면적 · 설계비 */}
-                        <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5">
+                        <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 items-center">
                           {item.year && (
                             <span className="text-xs text-zinc-400">{item.year}년</span>
                           )}
@@ -434,6 +434,9 @@ export default function SeoulImportPage() {
                             <span className="text-xs font-medium text-zinc-700">
                               설계비 {item.designFee}
                             </span>
+                          )}
+                          {item.specSource === 'scorer' && (item.floorArea > 0 || !!item.designFee) && (
+                            <span className="text-[10px] text-zinc-400 border border-zinc-200 rounded px-1 py-px">scorer</span>
                           )}
                         </div>
 
