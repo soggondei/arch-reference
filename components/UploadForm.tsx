@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Reference, Collection, RefType, REF_TYPE_LABEL, REF_TYPE_COLOR } from '@/lib/types';
 import { TAGS, TAG_LABELS, COLLECTION_COLORS, TagCategory } from '@/lib/tags';
 import { addRef, addCollection, generateId } from '@/lib/store';
@@ -47,6 +47,14 @@ export default function UploadForm({ collections, prefill, onSave, onCancel }: U
   const [fetching, setFetching] = useState(false);
   const [fetchError, setFetchError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // 북마클릿으로 열린 경우 자동으로 fetch-og 실행
+  useEffect(() => {
+    if (prefill?.sourceUrl) {
+      void handleFetchOG();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleFetchOG() {
     if (!sourceUrl.trim()) return;

@@ -4,6 +4,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { Reference, RefType, REF_TYPE_LABEL, REF_TYPE_COLOR } from '@/lib/types';
 import { addRef, generateId, getRefs } from '@/lib/store';
 import { SeoulImportItem } from '@/app/api/seoul-import/route';
+import { SimilarRefsResult } from '@/app/api/similar-refs/route';
 import Link from 'next/link';
 
 interface ImportState { checked: boolean; saved: boolean; }
@@ -55,6 +56,25 @@ export default function SeoulImportPage() {
   const [progress, setProgress] = useState<{ loaded: number; total: number } | null>(null);
   const [error,    setError]    = useState('');
   const [filters,  setFilters]  = useState<FilterState>(INIT_FILTER);
+
+  // 유사 사례 검색
+  const [similar, setSimilar] = useState<{
+    seq: number; title: string; imageUrl: string;
+    loading: boolean; result: SimilarRefsResult | null; error: string;
+  } | null>(null);
+
+  async function fetchSimilar(item: SeoulImportItem) {
+    setSimilar({ seq: item.cpttMstSeq, title: item.title, imageUrl: item.imageUrl, loading: true, result: null, error: '' });
+    try {
+      const params = new URLSearchParams({ imageUrl: item.imageUrl, title: item.title });
+      const res = await fetch(`/api/similar-refs?${params}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '분석 실패');
+      setSimilar(prev => prev ? { ...prev, loading: false, result: data } : null);
+    } catch (err) {
+      setSimilar(prev => prev ? { ...prev, loading: false, error: err instanceof Error ? err.message : '실패' } : null);
+    }
+  }
   const PAGE_UNIT = 20;
 
   // ── 필터 적용 ──────────────────────────────────────────────────────────────
@@ -447,6 +467,18 @@ export default function SeoulImportPage() {
                               <span key={i} className="px-1.5 py-0.5 bg-zinc-100 text-zinc-600 text-xs rounded">{tag}</span>
                             ))}
                         </div>
+
+                        {/* 유사 사례 검색 버튼 */}
+                        {item.imageUrl && (
+                          <button
+                            onClick={() => fetchSimilar(item)}
+                            className="mt-2.5 w-full py-1.5 text-xs text-zinc-400 border border-zinc-200 rounded-lg hover:border-zinc-400 hover:text-zinc-700 transition-all flex items-center justify-center gap-1.5">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                            </svg>
+                            유사 사례 검색
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -456,6 +488,110 @@ export default function SeoulImportPage() {
           </>
         )}
       </div>
+
+      {/* 유사 사례 모달 */}
+      {similar && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          onClick={() => setSimilar(null)}
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-auto shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* 모달 헤더 */}
+            <div className="sticky top-0 bg-white border-b border-zinc-100 px-5 py-4 flex items-start justify-between">
+              <div className="min-w-0 pr-4">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400 mb-0.5">유사 사례 검색</p>
+                <h2 className="font-semibold text-zinc-900 text-sm leading-tight line-clamp-2">{similar.title}</h2>
+                {similar.result && (
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    분석어: <span className="text-zinc-700">{similar.result.queryKo || similar.result.query}</span>
+                  </p>
+                )}
+              </div>
+              <button onClick={() => setSimilar(null)} className="shrink-0 text-zinc-400 hover:text-zinc-700 p-1 -m-1 rounded">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-5">
+              {/* 로딩 */}
+              {similar.loading && (
+                <div className="text-center py-14">
+                  <div className="w-6 h-6 border-2 border-zinc-200 border-t-zinc-700 rounded-full animate-spin mx-auto mb-3" />
+                  <p className="text-sm text-zinc-500">이미지 분석 중...</p>
+                  <p className="text-xs text-zinc-400 mt-1">Claude Vision으로 건축 특성을 추출하고 있습니다</p>
+                </div>
+              )}
+
+              {/* 오류 */}
+              {similar.error && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-600">
+                  {similar.error}
+                </div>
+              )}
+
+              {/* 결과 */}
+              {similar.result && (
+                <>
+                  {/* 키워드 태그 */}
+                  {similar.result.keywords.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-4">
+                      {similar.result.keywords.map((k, i) => (
+                        <span key={i} className="px-2.5 py-1 bg-zinc-100 text-zinc-700 text-xs rounded-full font-medium">{k}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* 카드 그리드 */}
+                  {similar.result.refs.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {similar.result.refs.map((ref, i) => (
+                        <a key={i} href={ref.url} target="_blank" rel="noopener noreferrer"
+                          className="group block bg-zinc-50 rounded-xl overflow-hidden border border-zinc-100 hover:border-zinc-300 transition-all">
+                          <div className="aspect-[4/3] bg-zinc-200 overflow-hidden">
+                            {ref.imageUrl && (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={ref.imageUrl} alt={ref.title}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                            )}
+                          </div>
+                          <div className="p-2">
+                            <p className="text-xs font-medium text-zinc-800 line-clamp-2">{ref.title}</p>
+                            {ref.architect && (
+                              <p className="text-[10px] text-zinc-500 mt-0.5 truncate">{ref.architect}</p>
+                            )}
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-zinc-500 mb-3">스크래핑된 결과가 없습니다. Archdaily에서 직접 확인하세요.</p>
+                  )}
+
+                  {/* Archdaily 바로가기 */}
+                  <div className="mt-4 pt-4 border-t border-zinc-100 flex items-center gap-3">
+                    <a href={similar.result.archdailyUrl} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm text-zinc-600 hover:text-zinc-900 font-medium transition-colors">
+                      Archdaily에서 결과 보기
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                        <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                      </svg>
+                    </a>
+                    <span className="text-zinc-300">|</span>
+                    <span className="text-xs text-zinc-400">검색어: {similar.result.query}</span>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

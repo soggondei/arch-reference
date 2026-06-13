@@ -10,21 +10,17 @@ export default function BookmarkletPage() {
     setOrigin(window.location.origin);
   }, []);
 
-  // 브라우저에서 더 많은 텍스트를 수집해 자동 태그 정확도를 높이는 북마클릿
   const bookmarkletCode = `javascript:(function(){
 var m=function(s){return document.querySelector(s)};
-var all=function(s){return Array.from(document.querySelectorAll(s))};
-var body=document.body.innerText.slice(0,800).replace(/\\s+/g,' ');
-var kws=all('meta[name="keywords"],meta[property="article:tag"]').map(function(e){return e.content}).join(',');
 var og={
-  title:m('meta[property="og:title"]')?.content||document.title||'',
-  imageUrl:m('meta[property="og:image"]')?.content||m('meta[name="twitter:image"]')?.content||'',
-  description:(m('meta[property="og:description"]')?.content||m('meta[name="description"]')?.content||'').slice(0,300),
-  bodyText:body,
-  keywords:kws.slice(0,300),
+  title:(m('meta[property="og:title"]')||{}).content||document.title||'',
+  imageUrl:(m('meta[property="og:image"]')||m('meta[name="twitter:image"]')||{}).content||'',
+  description:((m('meta[property="og:description"]')||m('meta[name="description"]')||{}).content||'').slice(0,200),
   sourceUrl:location.href
 };
-window.open('${origin || 'http://localhost:3000'}/?add=1&'+new URLSearchParams(og).toString(),'_blank');
+var url='${origin || 'http://localhost:3003'}/?add=1&'+new URLSearchParams(og).toString();
+var w=window.open(url,'_blank');
+if(!w||w.closed){location.href=url;}
 })();`.replace(/\n/g, '').replace(/\s{2,}/g, ' ').trim();
 
   const [copied, setCopied] = useState(false);

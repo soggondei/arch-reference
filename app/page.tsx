@@ -24,18 +24,16 @@ function BookmarkletHandler({ onPrefill }: { onPrefill: (data: Record<string, st
 
   useEffect(() => {
     if (searchParams.get('add') === '1') {
-      const title = searchParams.get('title') || '';
+      const title       = searchParams.get('title')       || '';
       const description = searchParams.get('description') || '';
-      const bodyText = searchParams.get('bodyText') || '';
-      const keywords = searchParams.get('keywords') || '';
+      const imageUrl    = searchParams.get('imageUrl')    || '';
+      const sourceUrl   = searchParams.get('sourceUrl')   || '';
 
-      const suggested = autoTag(title, description, [bodyText, keywords]);
+      // 기본 태그 추출 (fetch-og 자동호출로 덮어써짐)
+      const suggested = autoTag(title, description, []);
 
       onPrefill({
-        title,
-        imageUrl: searchParams.get('imageUrl') || '',
-        description,
-        sourceUrl: searchParams.get('sourceUrl') || '',
+        title, imageUrl, description, sourceUrl,
         _suggestedTags: JSON.stringify(suggested),
       });
       router.replace('/');
