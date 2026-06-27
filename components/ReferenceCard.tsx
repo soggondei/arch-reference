@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useRef, useEffect } from 'react';
 import { Reference, Collection, REF_TYPE_LABEL, REF_TYPE_COLOR, RefType } from '@/lib/types';
 import TagBadge from './TagBadge';
 import Link from 'next/link';
@@ -8,9 +9,23 @@ interface ReferenceCardProps {
   ref_: Reference;
   collections: Collection[];
   onDelete: (id: string) => void;
+  onCollectionToggle?: (refId: string, colId: string) => void;
 }
 
-export default function ReferenceCard({ ref_, collections, onDelete }: ReferenceCardProps) {
+export default function ReferenceCard({ ref_, collections, onDelete, onCollectionToggle }: ReferenceCardProps) {
+  const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showFolderPicker) return;
+    function handleClick(e: MouseEvent) {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setShowFolderPicker(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showFolderPicker]);
   const allTags = [
     ...ref_.tags.program,
     ...ref_.tags.material,
@@ -86,13 +101,55 @@ export default function ReferenceCard({ ref_, collections, onDelete }: Reference
         </div>
       </div>
 
-      <button
-        onClick={() => onDelete(ref_.id)}
-        className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 text-zinc-500 hover:text-red-500 hover:bg-white shadow opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-sm"
-        title="삭제"
-      >
-        ×
-      </button>
+      {/* Hover action buttons */}
+      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* Folder button */}
+        <div className="relative" ref={pickerRef}>
+          <button
+            onClick={e => { e.preventDefault(); setShowFolderPicker(v => !v); }}
+            className="w-7 h-7 rounded-full bg-white/90 text-zinc-500 hover:text-zinc-900 hover:bg-white shadow flex items-center justify-center"
+            title="폴더"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+            </svg>
+          </button>
+          {showFolderPicker && (
+            <div className="absolute right-0 top-8 z-50 bg-white rounded-xl shadow-lg border border-zinc-100 py-1 min-w-[140px]">
+              {collections.length === 0 ? (
+                <p className="text-xs text-zinc-400 px-3 py-2">폴더 없음</p>
+              ) : (
+                collections.map(col => {
+                  const active = ref_.collectionIds.includes(col.id);
+                  return (
+                    <button
+                      key={col.id}
+                      onClick={e => { e.preventDefault(); onCollectionToggle?.(ref_.id, col.id); }}
+                      className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-zinc-50 text-left"
+                    >
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: col.color }} />
+                      <span className="flex-1 truncate text-zinc-700">{col.name}</span>
+                      {active && (
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="text-zinc-900 shrink-0">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          )}
+        </div>
+        {/* Delete button */}
+        <button
+          onClick={() => onDelete(ref_.id)}
+          className="w-7 h-7 rounded-full bg-white/90 text-zinc-500 hover:text-red-500 hover:bg-white shadow flex items-center justify-center text-sm"
+          title="삭제"
+        >
+          ×
+        </button>
+      </div>
     </div>
   );
 }

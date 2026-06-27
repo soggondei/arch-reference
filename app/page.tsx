@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Reference, Collection, FilterState } from '@/lib/types';
-import { getRefs, getCollections, deleteRef } from '@/lib/store';
+import { COLLECTION_COLORS } from '@/lib/tags';
+import { getRefs, getCollections, deleteRef, addCollection, deleteCollection, updateRef, generateId } from '@/lib/store';
 import { autoTag } from '@/lib/auto-tag';
 import ReferenceCard from '@/components/ReferenceCard';
 import FilterPanel from '@/components/FilterPanel';
@@ -65,6 +66,28 @@ export default function Home() {
   async function handleDelete(id: string) {
     if (!confirm('이 레퍼런스를 삭제하시겠습니까?')) return;
     await deleteRef(id);
+    void load();
+  }
+
+  async function handleCreateCollection(name: string) {
+    const color = COLLECTION_COLORS[collections.length % COLLECTION_COLORS.length];
+    await addCollection({ id: generateId(), name, color, createdAt: new Date().toISOString() });
+    void load();
+  }
+
+  async function handleDeleteCollection(id: string) {
+    await deleteCollection(id);
+    setFilters(f => ({ ...f, collectionId: f.collectionId === id ? null : f.collectionId }));
+    void load();
+  }
+
+  async function handleCollectionToggle(refId: string, colId: string) {
+    const ref = refs.find(r => r.id === refId);
+    if (!ref) return;
+    const collectionIds = ref.collectionIds.includes(colId)
+      ? ref.collectionIds.filter(id => id !== colId)
+      : [...ref.collectionIds, colId];
+    await updateRef({ ...ref, collectionIds });
     void load();
   }
 
@@ -136,6 +159,8 @@ export default function Home() {
           collections={collections}
           totalCount={refs.length}
           filteredCount={filtered.length}
+          onCreateCollection={handleCreateCollection}
+          onDeleteCollection={handleDeleteCollection}
         />
 
         {/* Main grid */}
@@ -174,6 +199,7 @@ export default function Home() {
                   ref_={ref}
                   collections={collections}
                   onDelete={handleDelete}
+                  onCollectionToggle={handleCollectionToggle}
                 />
               ))}
             </div>

@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { FilterState, Collection, RefType, REF_TYPE_LABEL, REF_TYPE_COLOR } from '@/lib/types';
 import { TAGS, TAG_LABELS, TagCategory } from '@/lib/tags';
 import TagBadge from './TagBadge';
@@ -10,11 +11,23 @@ interface FilterPanelProps {
   collections: Collection[];
   totalCount: number;
   filteredCount: number;
+  onCreateCollection?: (name: string) => void;
+  onDeleteCollection?: (id: string) => void;
 }
 
 const MULTI_CATEGORIES: TagCategory[] = ['program', 'material', 'mass', 'scale', 'designItem', 'site', 'region'];
 
-export default function FilterPanel({ filters, onFilterChange, collections, totalCount, filteredCount }: FilterPanelProps) {
+export default function FilterPanel({ filters, onFilterChange, collections, totalCount, filteredCount, onCreateCollection, onDeleteCollection }: FilterPanelProps) {
+  const [showNewCol, setShowNewCol] = useState(false);
+  const [newColName, setNewColName] = useState('');
+
+  function handleCreateCollection() {
+    if (!newColName.trim()) return;
+    onCreateCollection?.(newColName.trim());
+    setNewColName('');
+    setShowNewCol(false);
+  }
+
   function toggle(category: keyof Omit<FilterState, 'search' | 'collectionId'>, value: string) {
     const current = filters[category] as string[];
     const updated = current.includes(value)
@@ -75,27 +88,54 @@ export default function FilterPanel({ filters, onFilterChange, collections, tota
         </div>
       </section>
 
-      {collections.length > 0 && (
-        <section>
-          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">컬렉션</p>
-          <div className="flex flex-col gap-1">
-            {collections.map(col => (
+      <section>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">폴더</p>
+          <button onClick={() => setShowNewCol(v => !v)} className="text-xs text-zinc-400 hover:text-zinc-700 leading-none">
+            {showNewCol ? '취소' : '+ 추가'}
+          </button>
+        </div>
+        {showNewCol && (
+          <div className="flex gap-1 mb-2">
+            <input
+              autoFocus
+              value={newColName}
+              onChange={e => setNewColName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleCreateCollection(); if (e.key === 'Escape') setShowNewCol(false); }}
+              placeholder="폴더 이름"
+              className="flex-1 border border-zinc-200 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-zinc-400"
+            />
+            <button onClick={handleCreateCollection} className="text-xs bg-zinc-900 text-white px-2 py-1 rounded-md hover:bg-zinc-700">
+              추가
+            </button>
+          </div>
+        )}
+        <div className="flex flex-col gap-0.5">
+          {collections.map(col => (
+            <div key={col.id} className="group/col flex items-center gap-1 rounded-md hover:bg-zinc-50">
               <button
-                key={col.id}
                 onClick={() => onFilterChange({ ...filters, collectionId: filters.collectionId === col.id ? null : col.id })}
-                className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors text-left ${
-                  filters.collectionId === col.id
-                    ? 'bg-zinc-900 text-white'
-                    : 'text-zinc-600 hover:bg-zinc-100'
+                className={`flex items-center gap-2 flex-1 px-2 py-1.5 text-sm transition-colors text-left rounded-md ${
+                  filters.collectionId === col.id ? 'bg-zinc-900 text-white' : 'text-zinc-600'
                 }`}
               >
                 <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: col.color }} />
                 <span className="truncate">{col.name}</span>
               </button>
-            ))}
-          </div>
-        </section>
-      )}
+              <button
+                onClick={() => onDeleteCollection?.(col.id)}
+                className="opacity-0 group-hover/col:opacity-100 pr-2 text-zinc-300 hover:text-red-500 transition-all text-base leading-none"
+                title="삭제"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          {collections.length === 0 && !showNewCol && (
+            <p className="text-xs text-zinc-300 px-2 py-1">폴더 없음</p>
+          )}
+        </div>
+      </section>
 
       {MULTI_CATEGORIES.map(category => (
         <section key={category}>
