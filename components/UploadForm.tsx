@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Reference, Collection, RefType, REF_TYPE_LABEL, REF_TYPE_COLOR } from '@/lib/types';
 import { TAGS, TAG_LABELS, COLLECTION_COLORS, TagCategory } from '@/lib/tags';
-import { addRef, addCollection, generateId } from '@/lib/store';
+import { addRef, addCollection, generateId, uploadImage } from '@/lib/store';
 import { SuggestedTags } from '@/lib/auto-tag';
 import TagBadge from './TagBadge';
 
@@ -18,7 +18,6 @@ type TagFields = Pick<Reference['tags'], 'program' | 'material' | 'mass' | 'desi
 const MULTI_TAG_CATEGORIES: (keyof TagFields)[] = ['program', 'material', 'mass', 'designItem', 'site'];
 
 export default function UploadForm({ collections, prefill, onSave, onCancel }: UploadFormProps) {
-  // 북마클릿에서 넘어온 사전 분류 태그
   const initialSuggested: SuggestedTags | null = (() => {
     try { return prefill?._suggestedTags ? JSON.parse(prefill._suggestedTags) : null; } catch { return null; }
   })();
@@ -46,9 +45,10 @@ export default function UploadForm({ collections, prefill, onSave, onCancel }: U
   const [imagePreview, setImagePreview] = useState(prefill?.imageUrl || '');
   const [fetching, setFetching] = useState(false);
   const [fetchError, setFetchError] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // 북마클릿으로 열린 경우 자동으로 fetch-og 실행
   useEffect(() => {
     if (prefill?.sourceUrl) {
       void handleFetchOG();
@@ -71,7 +71,6 @@ export default function UploadForm({ collections, prefill, onSave, onCancel }: U
       if (data.architect) setArchitect(data.architect);
       if (data.year) setYear(data.year);
 
-      // 자동 태그 적용
       if (data.suggestedTags) {
         const s: SuggestedTags = data.suggestedTags;
         setTags({
@@ -109,19 +108,28 @@ export default function UploadForm({ collections, prefill, onSave, onCancel }: U
     }));
   }
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const result = ev.target?.result as string;
-      setImageUrl(result);
-      setImagePreview(result);
-    };
-    reader.readAsDataURL(file);
+    const objectUrl = URL.createObjectURL(file);
+    setImagePreview(objectUrl);
+    setUploading(true);
+    setFetchError('');
+    try {
+      const url = await uploadImage(file);
+      setImageUrl(url);
+      setImagePreview(url);
+    } catch {
+      setFetchError('이미지 업로드 실패');
+      setImageUrl('');
+      setImagePreview('');
+    } finally {
+      setUploading(false);
+      URL.revokeObjectURL(objectUrl);
+    }
   }
 
-  function handleAddCollection() {
+  async function handleAddCollection() {
     if (!newColName.trim()) return;
     const col: Collection = {
       id: generateId(),
@@ -129,31 +137,37 @@ export default function UploadForm({ collections, prefill, onSave, onCancel }: U
       color: COLLECTION_COLORS[collections.length % COLLECTION_COLORS.length],
       createdAt: new Date().toISOString(),
     };
-    addCollection(col);
+    await addCollection(col);
     setSelectedCollections(prev => [...prev, col.id]);
     setNewColName('');
     onSave();
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim()) return;
-
-    const ref: Reference = {
-      id: generateId(),
-      title: title.trim(),
-      imageUrl,
-      sourceUrl: sourceUrl.trim() || undefined,
-      architect: architect.trim() || undefined,
-      year: year ? parseInt(year) : undefined,
-      description: description.trim() || undefined,
-      refType: refType || undefined,
-      tags: { ...tags, scale, region },
-      collectionIds: selectedCollections,
-      createdAt: new Date().toISOString(),
-    };
-    addRef(ref);
-    onSave();
+    if (!title.trim() || saving) return;
+    setSaving(true);
+    try {
+      const ref: Reference = {
+        id: generateId(),
+        title: title.trim(),
+        imageUrl,
+        sourceUrl: sourceUrl.trim() || undefined,
+        architect: architect.trim() || undefined,
+        year: year ? parseInt(year) : undefined,
+        description: description.trim() || undefined,
+        refType: refType || undefined,
+        tags: { ...tags, scale, region },
+        collectionIds: selectedCollections,
+        createdAt: new Date().toISOString(),
+      };
+      await addRef(ref);
+      onSave();
+    } catch {
+      setFetchError('저장 실패 — 다시 시도해 주세요');
+    } finally {
+      setSaving(false);
+    }
   }
 
   const totalSuggested = suggestedTags
@@ -265,8 +279,8 @@ export default function UploadForm({ collections, prefill, onSave, onCancel }: U
       <div>
         <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">이미지</label>
         <div
-          className="border-2 border-dashed border-zinc-200 rounded-xl p-4 text-center cursor-pointer hover:border-zinc-400 transition-colors"
-          onClick={() => fileRef.current?.click()}
+          className="border-2 border-dashed border-zinc-200 rounded-xl p-4 text-center cursor-pointer hover:border-zinc-400 transition-colors relative"
+          onClick={() => !uploading && fileRef.current?.click()}
         >
           {imagePreview ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -275,6 +289,11 @@ export default function UploadForm({ collections, prefill, onSave, onCancel }: U
             <div className="text-zinc-400 py-6">
               <p className="text-sm">클릭하여 이미지 업로드</p>
               <p className="text-xs mt-1">또는 아래 URL 직접 입력</p>
+            </div>
+          )}
+          {uploading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-white/70 rounded-xl">
+              <span className="w-6 h-6 border-2 border-zinc-300 border-t-zinc-700 rounded-full animate-spin" />
             </div>
           )}
           <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} className="hidden" />
@@ -448,11 +467,11 @@ export default function UploadForm({ collections, prefill, onSave, onCancel }: U
             onChange={e => setNewColName(e.target.value)}
             placeholder="새 컬렉션 이름"
             className="flex-1 border border-zinc-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-zinc-400"
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddCollection(); }}}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void handleAddCollection(); }}}
           />
           <button
             type="button"
-            onClick={handleAddCollection}
+            onClick={() => void handleAddCollection()}
             className="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 rounded-lg text-sm text-zinc-700 transition-colors"
           >
             추가
@@ -463,9 +482,15 @@ export default function UploadForm({ collections, prefill, onSave, onCancel }: U
       <div className="flex gap-3 pt-2 border-t border-zinc-100">
         <button
           type="submit"
-          className="flex-1 bg-zinc-900 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-zinc-700 transition-colors"
+          disabled={saving || uploading}
+          className="flex-1 bg-zinc-900 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-zinc-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
         >
-          저장
+          {saving ? (
+            <>
+              <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              저장 중
+            </>
+          ) : '저장'}
         </button>
         <button
           type="button"

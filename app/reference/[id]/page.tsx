@@ -20,28 +20,28 @@ export default function ReferencePage() {
   const [editingNote, setEditingNote] = useState(false);
   const [noteValue, setNoteValue] = useState('');
 
-  const load = useCallback(() => {
-    const refs = getRefs();
+  const load = useCallback(async () => {
+    const [refs, cols] = await Promise.all([getRefs(), getCollections()]);
     const found = refs.find(r => r.id === id) ?? null;
     setRef(found);
     setNoteValue(found?.description ?? '');
     setAllRefs(refs);
-    setCollections(getCollections());
+    setCollections(cols);
   }, [id]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
-  function saveNote() {
+  async function saveNote() {
     if (!ref_) return;
     const updated = { ...ref_, description: noteValue };
-    updateRef(updated);
+    await updateRef(updated);
     setRef(updated);
     setEditingNote(false);
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!confirm('이 레퍼런스를 삭제하시겠습니까?')) return;
-    deleteRef(id);
+    await deleteRef(id);
     router.push('/');
   }
 
@@ -73,14 +73,13 @@ export default function ReferencePage() {
           </Link>
           <span className="text-zinc-200">|</span>
           <h1 className="font-semibold text-zinc-900 text-sm truncate">{ref_.title}</h1>
-          <button onClick={handleDelete} className="ml-auto text-xs text-zinc-400 hover:text-red-500 transition-colors">
+          <button onClick={() => void handleDelete()} className="ml-auto text-xs text-zinc-400 hover:text-red-500 transition-colors">
             삭제
           </button>
         </div>
       </header>
 
       <div className="max-w-screen-lg mx-auto px-6 py-8">
-        {/* 상세 정보 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
           {/* 이미지 */}
           <div className="rounded-2xl overflow-hidden bg-zinc-100 aspect-[4/3]">
@@ -161,7 +160,7 @@ export default function ReferencePage() {
                     className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-400 resize-none"
                   />
                   <div className="flex gap-2">
-                    <button onClick={saveNote} className="text-sm bg-zinc-900 text-white px-4 py-1.5 rounded-lg hover:bg-zinc-700 transition-colors">저장</button>
+                    <button onClick={() => void saveNote()} className="text-sm bg-zinc-900 text-white px-4 py-1.5 rounded-lg hover:bg-zinc-700 transition-colors">저장</button>
                     <button onClick={() => { setEditingNote(false); setNoteValue(ref_.description ?? ''); }}
                       className="text-sm text-zinc-500 hover:text-zinc-700">취소</button>
                   </div>
@@ -180,7 +179,7 @@ export default function ReferencePage() {
           target={ref_}
           allRefs={allRefs}
           collections={collections}
-          onRefAdded={load}
+          onRefAdded={() => void load()}
         />
       </div>
     </div>

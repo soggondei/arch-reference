@@ -17,7 +17,6 @@ const INIT_FILTERS: FilterState = {
   collectionId: null,
 };
 
-// useSearchParams는 Suspense boundary 안에서만 사용 가능
 function BookmarkletHandler({ onPrefill }: { onPrefill: (data: Record<string, string>) => void }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -29,7 +28,6 @@ function BookmarkletHandler({ onPrefill }: { onPrefill: (data: Record<string, st
       const imageUrl    = searchParams.get('imageUrl')    || '';
       const sourceUrl   = searchParams.get('sourceUrl')   || '';
 
-      // 기본 태그 추출 (fetch-og 자동호출로 덮어써짐)
       const suggested = autoTag(title, description, []);
 
       onPrefill({
@@ -51,22 +49,23 @@ export default function Home() {
   const [showUpload, setShowUpload] = useState(false);
   const [prefill, setPrefill] = useState<Record<string, string> | null>(null);
 
-  const load = useCallback(() => {
-    setRefs(getRefs());
-    setCollections(getCollections());
+  const load = useCallback(async () => {
+    const [r, c] = await Promise.all([getRefs(), getCollections()]);
+    setRefs(r);
+    setCollections(c);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   function handlePrefill(data: Record<string, string>) {
     setPrefill(data);
     setShowUpload(true);
   }
 
-  function handleDelete(id: string) {
+  async function handleDelete(id: string) {
     if (!confirm('이 레퍼런스를 삭제하시겠습니까?')) return;
-    deleteRef(id);
-    load();
+    await deleteRef(id);
+    void load();
   }
 
   const filtered = refs.filter(ref => {
@@ -96,7 +95,7 @@ export default function Home() {
       {/* Header */}
       <header className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-zinc-100">
         <div className="max-w-screen-xl mx-auto px-6 h-14 flex items-center gap-4">
-          <h1 className="font-bold text-zinc-900 text-base tracking-tight shrink-0">Arch Reference</h1>
+          <Link href="/" onClick={() => setFilters(INIT_FILTERS)} className="font-bold text-zinc-900 text-base tracking-tight shrink-0 hover:text-zinc-600 transition-colors">Arch Reference</Link>
           <div className="flex-1 relative max-w-md">
             <input
               value={filters.search}
@@ -109,22 +108,13 @@ export default function Home() {
             </svg>
           </div>
           <div className="ml-auto flex items-center gap-2 shrink-0">
-            <Link
-              href="/seoul-import"
-              className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden sm:block"
-            >
+            <Link href="/seoul-import" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden sm:block">
               서울시 공모전
             </Link>
-            <Link
-              href="/scorer-import"
-              className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden sm:block"
-            >
+            <Link href="/scorer-import" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden sm:block">
               스코어러
             </Link>
-            <Link
-              href="/bookmarklet"
-              className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden sm:block"
-            >
+            <Link href="/bookmarklet" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden sm:block">
               북마클릿 설치
             </Link>
             <button
@@ -202,7 +192,7 @@ export default function Home() {
             <UploadForm
               collections={collections}
               prefill={prefill}
-              onSave={() => { load(); setShowUpload(false); setPrefill(null); }}
+              onSave={async () => { setShowUpload(false); setPrefill(null); await load(); }}
               onCancel={() => { setShowUpload(false); setPrefill(null); }}
             />
           </div>

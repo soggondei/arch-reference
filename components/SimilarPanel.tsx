@@ -55,7 +55,7 @@ export default function SimilarPanel({ target, allRefs, collections, onRefAdded 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
-  function quickSave(suggestion: SuggestedRef) {
+  async function quickSave(suggestion: SuggestedRef) {
     const ref: Reference = {
       id: generateId(),
       title: suggestion.title,
@@ -63,11 +63,11 @@ export default function SimilarPanel({ target, allRefs, collections, onRefAdded 
       sourceUrl: suggestion.sourceUrl,
       architect: suggestion.architect || undefined,
       year: suggestion.year ? parseInt(suggestion.year) : undefined,
-      tags: { ...target.tags },  // 현재 레퍼런스 태그 그대로 복사 (수정 가능)
+      tags: { ...target.tags },
       collectionIds: target.collectionIds,
       createdAt: new Date().toISOString(),
     };
-    addRef(ref);
+    await addRef(ref);
     setAddedUrls(prev => new Set(prev).add(suggestion.sourceUrl));
     onRefAdded();
   }
@@ -217,7 +217,7 @@ export default function SimilarPanel({ target, allRefs, collections, onRefAdded 
 
                       {/* 저장 버튼 */}
                       <button
-                        onClick={() => quickSave(item)}
+                        onClick={() => void quickSave(item)}
                         disabled={alreadySaved || justAdded}
                         className={`absolute top-2 right-2 w-7 h-7 rounded-full shadow flex items-center justify-center text-sm transition-all ${
                           alreadySaved || justAdded

@@ -127,7 +127,7 @@ export default function SeoulImportPage() {
     setProgress(null);
     setFilters(INIT_FILTER);
 
-    const existing    = getRefs();
+    const existing    = await getRefs();
     const existingUrls = new Set(existing.map(r => r.sourceUrl).filter(Boolean));
 
     try {
@@ -186,11 +186,11 @@ export default function SeoulImportPage() {
     }
     setStates(next);
   }
-  function importSelected() {
+  async function importSelected() {
     const toImport = filtered.filter(i => states[i.cpttMstSeq]?.checked && !states[i.cpttMstSeq]?.saved);
     if (!toImport.length) return;
     const next = { ...states };
-    for (const item of toImport) {
+    await Promise.all(toImport.map(async item => {
       const ref: Reference = {
         id: generateId(), title: item.title, imageUrl: item.imageUrl,
         sourceUrl: item.sourceUrl, architect: item.architect || undefined,
@@ -203,10 +203,10 @@ export default function SeoulImportPage() {
         },
         collectionIds: [], createdAt: new Date().toISOString(),
       };
-      addRef(ref);
+      await addRef(ref);
       next[item.cpttMstSeq] = { checked: true, saved: true };
-    }
-    setStates(next);
+    }));
+    setStates({ ...next });
   }
 
   const checkedCount = filtered.filter(i => states[i.cpttMstSeq]?.checked && !states[i.cpttMstSeq]?.saved).length;
@@ -378,7 +378,7 @@ export default function SeoulImportPage() {
                   {checkedCount > 0 && ` · 선택 ${checkedCount}건`}
                 </span>
               </div>
-              <button onClick={importSelected} disabled={checkedCount === 0}
+              <button onClick={() => void importSelected()} disabled={checkedCount === 0}
                 className="px-4 py-2 bg-zinc-900 text-white text-sm font-medium rounded-xl hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                 선택한 {checkedCount}건 저장
               </button>

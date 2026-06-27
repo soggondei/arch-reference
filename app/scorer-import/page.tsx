@@ -191,7 +191,7 @@ export default function ScorerImportPage() {
     setLoading(true);
     setError('');
 
-    const existing = getRefs();
+    const existing = await getRefs();
     const existingUrls = new Set(existing.map(r => r.sourceUrl).filter(Boolean));
 
     try {
@@ -251,11 +251,11 @@ export default function ScorerImportPage() {
     setStates(next);
   }
 
-  function importSelected() {
+  async function importSelected() {
     const toImport = filtered.filter(item => states[item.id]?.checked && !states[item.id]?.saved);
     if (!toImport.length) return;
     const newStates = { ...states };
-    for (const item of toImport) {
+    await Promise.all(toImport.map(async item => {
       const ref: Reference = {
         id: generateId(),
         title: item.title,
@@ -276,10 +276,10 @@ export default function ScorerImportPage() {
         collectionIds: [],
         createdAt: new Date().toISOString(),
       };
-      addRef(ref);
+      await addRef(ref);
       newStates[item.id] = { checked: true, saved: true };
-    }
-    setStates(newStates);
+    }));
+    setStates({ ...newStates });
   }
 
   const checkedCount = filtered.filter(item => states[item.id]?.checked && !states[item.id]?.saved).length;
@@ -439,7 +439,7 @@ export default function ScorerImportPage() {
                   새로고침
                 </button>
                 <button
-                  onClick={importSelected}
+                  onClick={() => void importSelected()}
                   disabled={checkedCount === 0}
                   className="px-4 py-2 bg-zinc-900 text-white text-sm font-medium rounded-xl hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
