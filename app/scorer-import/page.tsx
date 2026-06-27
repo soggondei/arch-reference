@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useCallback, useMemo, useRef } from 'react';
-import { Reference, RefType } from '@/lib/types';
-import { addRef, generateId, getRefs } from '@/lib/store';
+import { Reference, RefType, Collection } from '@/lib/types';
+import { COLLECTION_COLORS } from '@/lib/tags';
+import { addRef, generateId, getRefs, getCollections, addCollection } from '@/lib/store';
 import { ScorerImportItem } from '@/app/api/scorer-import/route';
 import Link from 'next/link';
 
@@ -147,6 +148,10 @@ export default function ScorerImportPage() {
   const [progress, setProgress] = useState<{ loaded: number; total: number } | null>(null);
   const [error, setError] = useState('');
   const [filters, setFilters] = useState<FilterState>(INIT_FILTER);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [selectedColId, setSelectedColId] = useState<string>('');
+  const [newColName, setNewColName] = useState('');
+  const [showNewCol, setShowNewCol] = useState(false);
   const itemsRef = useRef<ScorerImportItem[]>([]); // stale closure 방지용 ref
 
   // 필터 적용
@@ -191,8 +196,9 @@ export default function ScorerImportPage() {
     setLoading(true);
     setError('');
 
-    const existing = await getRefs();
+    const [existing, cols] = await Promise.all([getRefs(), getCollections()]);
     const existingUrls = new Set(existing.map(r => r.sourceUrl).filter(Boolean));
+    setCollections(cols);
 
     try {
       if (isInitial) {
@@ -251,6 +257,21 @@ export default function ScorerImportPage() {
     setStates(next);
   }
 
+  async function handleCreateCollection() {
+    if (!newColName.trim()) return;
+    const col: Collection = {
+      id: generateId(),
+      name: newColName.trim(),
+      color: COLLECTION_COLORS[collections.length % COLLECTION_COLORS.length],
+      createdAt: new Date().toISOString(),
+    };
+    await addCollection(col);
+    setCollections(prev => [...prev, col]);
+    setSelectedColId(col.id);
+    setNewColName('');
+    setShowNewCol(false);
+  }
+
   async function importSelected() {
     const toImport = filtered.filter(item => states[item.id]?.checked && !states[item.id]?.saved);
     if (!toImport.length) return;
@@ -273,7 +294,7 @@ export default function ScorerImportPage() {
           site: item.suggestedTags.site || [],
           region: item.suggestedTags.region || '',
         },
-        collectionIds: [],
+        collectionIds: selectedColId ? [selectedColId] : [],
         createdAt: new Date().toISOString(),
       };
       await addRef(ref);
@@ -409,42 +430,94 @@ export default function ScorerImportPage() {
             </div>
 
             {/* 액션 바 */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 text-sm text-zinc-600 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={
-                      filtered.filter(i => !states[i.id]?.saved).length > 0 &&
-                      filtered.filter(i => !states[i.id]?.saved).every(i => states[i.id]?.checked)
-                    }
-                    onChange={e => toggleAll(e.target.checked)}
-                    className="accent-zinc-900"
-                  />
-                  전체 선택
-                </label>
-                <span className="text-sm text-zinc-400">
-                  {hasFilter
-                    ? `${filtered.length}건 필터됨 (로드 ${items.length}건)`
-                    : `${total.toLocaleString()}건 중 ${items.length}건 로드됨`}
-                  {checkedCount > 0 && ` · 선택 ${checkedCount}건`}
-                </span>
+            <div className="flex flex-col gap-3 mb-4">
+              {/* 컬렉션 선택 */}
+              <div className="bg-white border border-zinc-100 rounded-xl px-4 py-3 flex flex-wrap items-center gap-3">
+                <span className="text-xs font-semibold text-zinc-500 shrink-0">프로젝트 폴더</span>
+                <div className="flex flex-wrap gap-2 flex-1">
+                  <button
+                    onClick={() => setSelectedColId('')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                      selectedColId === '' ? 'bg-zinc-900 text-white border-zinc-900' : 'border-zinc-200 text-zinc-500 hover:border-zinc-400'
+                    }`}
+                  >
+                    폴더 없음
+                  </button>
+                  {collections.map(col => (
+                    <button
+                      key={col.id}
+                      onClick={() => setSelectedColId(col.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                        selectedColId === col.id ? 'bg-zinc-900 text-white border-zinc-900' : 'border-zinc-200 text-zinc-600 hover:border-zinc-400'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: col.color }} />
+                      {col.name}
+                    </button>
+                  ))}
+                  {showNewCol ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        autoFocus
+                        value={newColName}
+                        onChange={e => setNewColName(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') void handleCreateCollection(); if (e.key === 'Escape') setShowNewCol(false); }}
+                        placeholder="폴더 이름"
+                        className="border border-zinc-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-zinc-500 w-32"
+                      />
+                      <button onClick={() => void handleCreateCollection()} className="text-xs text-zinc-900 font-medium hover:underline">추가</button>
+                      <button onClick={() => setShowNewCol(false)} className="text-xs text-zinc-400 hover:text-zinc-600">취소</button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowNewCol(true)}
+                      className="px-3 py-1.5 rounded-lg text-xs border border-dashed border-zinc-300 text-zinc-400 hover:border-zinc-500 hover:text-zinc-600 transition-all"
+                    >
+                      + 새 폴더
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => loadBatch(1, true)}
-                  disabled={loading}
-                  className="px-3 py-2 border border-zinc-200 text-zinc-600 text-sm rounded-xl hover:bg-zinc-50 disabled:opacity-40 transition-colors"
-                >
-                  새로고침
-                </button>
-                <button
-                  onClick={() => void importSelected()}
-                  disabled={checkedCount === 0}
-                  className="px-4 py-2 bg-zinc-900 text-white text-sm font-medium rounded-xl hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  선택한 {checkedCount}건 저장
-                </button>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 text-sm text-zinc-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={
+                        filtered.filter(i => !states[i.id]?.saved).length > 0 &&
+                        filtered.filter(i => !states[i.id]?.saved).every(i => states[i.id]?.checked)
+                      }
+                      onChange={e => toggleAll(e.target.checked)}
+                      className="accent-zinc-900"
+                    />
+                    전체 선택
+                  </label>
+                  <span className="text-sm text-zinc-400">
+                    {hasFilter
+                      ? `${filtered.length}건 필터됨 (로드 ${items.length}건)`
+                      : `${total.toLocaleString()}건 중 ${items.length}건 로드됨`}
+                    {checkedCount > 0 && ` · 선택 ${checkedCount}건`}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => loadBatch(1, true)}
+                    disabled={loading}
+                    className="px-3 py-2 border border-zinc-200 text-zinc-600 text-sm rounded-xl hover:bg-zinc-50 disabled:opacity-40 transition-colors"
+                  >
+                    새로고침
+                  </button>
+                  <button
+                    onClick={() => void importSelected()}
+                    disabled={checkedCount === 0}
+                    className="px-4 py-2 bg-zinc-900 text-white text-sm font-medium rounded-xl hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {selectedColId
+                      ? `"${collections.find(c => c.id === selectedColId)?.name}"에 ${checkedCount}건 저장`
+                      : `선택한 ${checkedCount}건 저장`}
+                  </button>
+                </div>
               </div>
             </div>
 
