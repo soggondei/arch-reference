@@ -194,9 +194,18 @@ export async function GET(req: NextRequest) {
       $('meta[name="twitter:title"]').attr('content') ||
       $('title').first().text().trim() || '';
 
-    const ogImage =
+    const rawOgImage =
       $('meta[property="og:image"]').attr('content') ||
       $('meta[name="twitter:image"]').attr('content') || '';
+
+    // 상대 URL → 절대 URL 변환
+    const ogImage = rawOgImage
+      ? rawOgImage.startsWith('http')
+        ? rawOgImage
+        : rawOgImage.startsWith('//')
+          ? `https:${rawOgImage}`
+          : `${targetUrl.protocol}//${targetUrl.host}${rawOgImage.startsWith('/') ? '' : '/'}${rawOgImage}`
+      : '';
 
     const ogDesc =
       $('meta[property="og:description"]').attr('content') ||

@@ -14,6 +14,7 @@ interface ReferenceCardProps {
 
 export default function ReferenceCard({ ref_, collections, onDelete, onCollectionToggle }: ReferenceCardProps) {
   const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -40,12 +41,13 @@ export default function ReferenceCard({ ref_, collections, onDelete, onCollectio
     <div className="group relative bg-white rounded-xl overflow-hidden border border-zinc-100 hover:border-zinc-300 hover:shadow-lg transition-all duration-200">
       <Link href={`/reference/${ref_.id}`}>
         <div className="relative aspect-[4/3] bg-zinc-50 overflow-hidden">
-          {ref_.imageUrl ? (
+          {ref_.imageUrl && !imgError ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={ref_.imageUrl}
               alt={ref_.title}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              onError={() => setImgError(true)}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-zinc-300">
