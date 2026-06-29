@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Reference, Collection, FilterState } from '@/lib/types';
+import { Reference, Collection, FilterState, CompetitionStatus, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR } from '@/lib/types';
 import { COLLECTION_COLORS } from '@/lib/tags';
-import { getRefs, getCollections, deleteRef, addCollection, deleteCollection, updateRef, generateId } from '@/lib/store';
+import { getRefs, getCollections, deleteRef, addCollection, deleteCollection, updateRef, generateId, updateCompetitionStatus } from '@/lib/store';
 import { autoTag } from '@/lib/auto-tag';
 import ReferenceCard from '@/components/ReferenceCard';
 import FilterPanel from '@/components/FilterPanel';
@@ -18,6 +18,223 @@ const INIT_FILTERS: FilterState = {
   collectionId: null,
 };
 
+function getDDay(dateStr?: string): number | null {
+  if (!dateStr) return null;
+  const m = dateStr.match(/(\d{4}-\d{2}-\d{2})/);
+  if (!m) return null;
+  const deadline = new Date(m[1]);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return Math.ceil((deadline.getTime() - today.getTime()) / 86400000);
+}
+
+function DDayBadge({ dday }: { dday: number | null }) {
+  if (dday === null) return null;
+  const bg = dday < 0 ? '#94a3b8' : dday <= 7 ? '#ef4444' : dday <= 30 ? '#f97316' : '#3b82f6';
+  return (
+    <span className="text-[10px] font-bold text-white px-1.5 py-0.5 rounded shrink-0" style={{ backgroundColor: bg }}>
+      {dday < 0 ? '마감' : dday === 0 ? 'D-Day' : `D-${dday}`}
+    </span>
+  );
+}
+
+function CompetitionRow({
+  ref_,
+  onStatusChange,
+  onDelete,
+}: {
+  ref_: Reference;
+  onStatusChange: (id: string, status: CompetitionStatus) => void;
+  onDelete: (id: string) => void;
+}) {
+  const cd = ref_.competitionData!;
+  const dday = getDDay(cd.submissionDate);
+  const [showPicker, setShowPicker] = useState(false);
+
+  return (
+    <div className="bg-white border border-zinc-100 hover:border-zinc-200 hover:shadow-sm transition-all rounded-xl px-4 py-3 flex items-center gap-4">
+      {/* 상태 */}
+      <div className="relative shrink-0">
+        <button
+          onClick={() => setShowPicker(v => !v)}
+          className="flex items-center gap-1 text-xs font-bold text-white px-2.5 py-1 rounded-full whitespace-nowrap"
+          style={{ backgroundColor: COMPETITION_STATUS_COLOR[cd.status] }}
+        >
+          {cd.status}
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        {showPicker && (
+          <div className="absolute left-0 top-8 z-20 bg-white rounded-xl shadow-lg border border-zinc-100 py-1 min-w-[120px]">
+            {COMPETITION_STATUSES.map(s => (
+              <button
+                key={s}
+                onClick={() => { onStatusChange(ref_.id, s); setShowPicker(false); }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-50 text-left"
+              >
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: COMPETITION_STATUS_COLOR[s] }} />
+                <span className={s === cd.status ? 'font-bold text-zinc-900' : 'text-zinc-600'}>{s}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* D-day */}
+      <div className="shrink-0 w-12 text-right">
+        <DDayBadge dday={dday} />
+      </div>
+
+      {/* 제목 */}
+      <Link href={`/reference/${ref_.id}`} className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-zinc-900 truncate hover:underline">{ref_.title}</p>
+        {ref_.architect && <p className="text-xs text-zinc-400 truncate">{ref_.architect}</p>}
+      </Link>
+
+      {/* 날짜·비용 (넓은 화면) */}
+      <div className="hidden md:flex items-center gap-6 shrink-0 text-xs text-zinc-500">
+        {cd.submissionDate && (
+          <div className="text-right">
+            <p className="text-[10px] text-zinc-400">작품접수</p>
+            <p>{cd.submissionDate.slice(0, 10)}</p>
+          </div>
+        )}
+        {cd.designFee && (
+          <div className="text-right">
+            <p className="text-[10px] text-zinc-400">설계비</p>
+            <p className="font-medium text-zinc-700">{cd.designFee}</p>
+          </div>
+        )}
+        {cd.floorAreaText && (
+          <div className="text-right">
+            <p className="text-[10px] text-zinc-400">연면적</p>
+            <p>{cd.floorAreaText}</p>
+          </div>
+        )}
+      </div>
+
+      {/* 삭제 */}
+      <button
+        onClick={() => onDelete(ref_.id)}
+        className="shrink-0 text-zinc-300 hover:text-red-400 text-lg leading-none transition-colors"
+        title="삭제"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+function CompetitionView({
+  refs,
+  onStatusChange,
+  onDelete,
+}: {
+  refs: Reference[];
+  onStatusChange: (id: string, status: CompetitionStatus) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<CompetitionStatus | null>(null);
+
+  const active = COMPETITION_STATUSES.slice(0, 5);
+  const results = COMPETITION_STATUSES.slice(5);
+
+  const filtered = refs.filter(r => {
+    if (statusFilter && r.competitionData?.status !== statusFilter) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      if (![r.title, r.architect, r.competitionData?.location].join(' ').toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  const totalFee = refs
+    .filter(r => active.includes(r.competitionData?.status as CompetitionStatus))
+    .reduce((sum, r) => sum + (r.competitionData?.designFeeAmount || 0), 0);
+
+  const byStatus = (s: CompetitionStatus) => filtered.filter(r => r.competitionData?.status === s);
+
+  return (
+    <div className="flex-1 min-w-0">
+      {/* 검색 + 상태 필터 */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="공모전 검색..."
+          className="pl-3 pr-3 py-1.5 bg-zinc-100 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-zinc-300 w-48"
+        />
+        <button
+          onClick={() => setStatusFilter(null)}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${!statusFilter ? 'bg-zinc-900 text-white border-zinc-900' : 'border-zinc-200 text-zinc-500'}`}
+        >
+          전체 {refs.length}
+        </button>
+        {COMPETITION_STATUSES.map(s => {
+          const cnt = refs.filter(r => r.competitionData?.status === s).length;
+          if (cnt === 0) return null;
+          return (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(statusFilter === s ? null : s)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all"
+              style={statusFilter === s
+                ? { backgroundColor: COMPETITION_STATUS_COLOR[s], color: '#fff', borderColor: COMPETITION_STATUS_COLOR[s] }
+                : { borderColor: '#e4e4e7', color: '#71717a' }
+              }
+            >
+              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: statusFilter === s ? '#fff' : COMPETITION_STATUS_COLOR[s] }} />
+              {s} {cnt}
+            </button>
+          );
+        })}
+        {totalFee > 0 && (
+          <span className="ml-auto text-xs text-zinc-400">진행 중 설계비 합계 약 {totalFee.toFixed(1)}억</span>
+        )}
+      </div>
+
+      {refs.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <p className="text-zinc-500 font-medium">저장된 공모전이 없습니다</p>
+          <p className="text-zinc-400 text-sm mt-1">스코어러에서 공모전을 가져와 저장해 보세요</p>
+          <Link href="/scorer-import" className="mt-4 bg-zinc-900 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-zinc-700 transition-colors">
+            스코어러 가져오기
+          </Link>
+        </div>
+      ) : filtered.length === 0 ? (
+        <p className="text-zinc-400 text-sm py-12 text-center">검색 결과가 없습니다</p>
+      ) : (
+        <div className="flex flex-col gap-6">
+          {/* 진행 중 */}
+          {active.some(s => byStatus(s).length > 0) && (
+            <div className="flex flex-col gap-2">
+              {active.map(s => byStatus(s).length > 0 && (
+                <div key={s}>
+                  {byStatus(s).map(r => (
+                    <div key={r.id} className="mb-2">
+                      <CompetitionRow ref_={r} onStatusChange={onStatusChange} onDelete={onDelete} />
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+          {/* 결과 */}
+          {results.some(s => byStatus(s).length > 0) && (
+            <div>
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">결과</p>
+              <div className="flex flex-col gap-2">
+                {results.map(s => byStatus(s).map(r => (
+                  <CompetitionRow key={r.id} ref_={r} onStatusChange={onStatusChange} onDelete={onDelete} />
+                )))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BookmarkletHandler({ onPrefill }: { onPrefill: (data: Record<string, string>) => void }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -28,13 +245,8 @@ function BookmarkletHandler({ onPrefill }: { onPrefill: (data: Record<string, st
       const description = searchParams.get('description') || '';
       const imageUrl    = searchParams.get('imageUrl')    || '';
       const sourceUrl   = searchParams.get('sourceUrl')   || '';
-
       const suggested = autoTag(title, description, []);
-
-      onPrefill({
-        title, imageUrl, description, sourceUrl,
-        _suggestedTags: JSON.stringify(suggested),
-      });
+      onPrefill({ title, imageUrl, description, sourceUrl, _suggestedTags: JSON.stringify(suggested) });
       router.replace('/');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -49,6 +261,7 @@ export default function Home() {
   const [filters, setFilters] = useState<FilterState>(INIT_FILTERS);
   const [showUpload, setShowUpload] = useState(false);
   const [prefill, setPrefill] = useState<Record<string, string> | null>(null);
+  const [tab, setTab] = useState<'refs' | 'competitions'>('refs');
 
   const load = useCallback(async () => {
     const [r, c] = await Promise.all([getRefs(), getCollections()]);
@@ -91,7 +304,19 @@ export default function Home() {
     void load();
   }
 
-  const filtered = refs.filter(ref => {
+  async function handleCompetitionStatusChange(id: string, status: CompetitionStatus) {
+    const ref = refs.find(r => r.id === id);
+    if (!ref?.competitionData) return;
+    const updated = { ...ref.competitionData, status };
+    await updateCompetitionStatus(id, updated);
+    setRefs(prev => prev.map(r => r.id === id ? { ...r, competitionData: updated } : r));
+  }
+
+  // 레퍼런스 vs 공모전 분리
+  const regularRefs = refs.filter(r => !r.competitionData);
+  const competitionRefs = refs.filter(r => r.competitionData);
+
+  const filtered = regularRefs.filter(ref => {
     if (filters.search) {
       const q = filters.search.toLowerCase();
       const text = [ref.title, ref.architect, ref.description, ...Object.values(ref.tags).flat()].join(' ').toLowerCase();
@@ -118,31 +343,31 @@ export default function Home() {
       {/* Header */}
       <header className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-zinc-100">
         <div className="max-w-screen-xl mx-auto px-6 h-14 flex items-center gap-4">
-          <Link href="/" onClick={() => setFilters(INIT_FILTERS)} className="font-bold text-zinc-900 text-base tracking-tight shrink-0 hover:text-zinc-600 transition-colors">Arch Reference</Link>
-          <div className="flex-1 relative max-w-md">
-            <input
-              value={filters.search}
-              onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
-              placeholder="제목, 건축가, 태그 검색..."
-              className="w-full pl-9 pr-3 py-1.5 bg-zinc-100 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-zinc-300"
-            />
-            <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-          </div>
+          <button
+            onClick={() => { setTab('refs'); setFilters(INIT_FILTERS); }}
+            className="font-bold text-zinc-900 text-base tracking-tight shrink-0 hover:text-zinc-600 transition-colors"
+          >
+            Arch Reference
+          </button>
+
+          {tab === 'refs' && (
+            <div className="flex-1 relative max-w-md">
+              <input
+                value={filters.search}
+                onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
+                placeholder="제목, 건축가, 태그 검색..."
+                className="w-full pl-9 pr-3 py-1.5 bg-zinc-100 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-zinc-300"
+              />
+              <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+            </div>
+          )}
+
           <div className="ml-auto flex items-center gap-2 shrink-0">
-            <Link href="/competitions" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden sm:block">
-              공모전 트래커
-            </Link>
-            <Link href="/seoul-import" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden sm:block">
-              서울시 공모전
-            </Link>
-            <Link href="/scorer-import" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden sm:block">
-              스코어러
-            </Link>
-            <Link href="/bookmarklet" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden sm:block">
-              북마클릿 설치
-            </Link>
+            <Link href="/seoul-import" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden sm:block">서울시 공모전</Link>
+            <Link href="/scorer-import" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden sm:block">스코어러</Link>
+            <Link href="/bookmarklet" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden sm:block">북마클릿</Link>
             <button
               onClick={() => setShowUpload(true)}
               className="flex items-center gap-2 bg-zinc-900 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-zinc-700 transition-colors"
@@ -152,65 +377,84 @@ export default function Home() {
             </button>
           </div>
         </div>
+
+        {/* 탭 */}
+        <div className="max-w-screen-xl mx-auto px-6 flex gap-0 border-t border-zinc-100">
+          <button
+            onClick={() => setTab('refs')}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${tab === 'refs' ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-400 hover:text-zinc-700'}`}
+          >
+            레퍼런스 {regularRefs.length > 0 && <span className="ml-1 text-xs text-zinc-400">{regularRefs.length}</span>}
+          </button>
+          <button
+            onClick={() => setTab('competitions')}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${tab === 'competitions' ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-400 hover:text-zinc-700'}`}
+          >
+            공모전 {competitionRefs.length > 0 && <span className="ml-1 text-xs text-zinc-400">{competitionRefs.length}</span>}
+          </button>
+        </div>
       </header>
 
       <div className="max-w-screen-xl mx-auto px-6 py-6 flex gap-8">
-        {/* Filter sidebar */}
-        <FilterPanel
-          filters={filters}
-          onFilterChange={setFilters}
-          collections={collections}
-          totalCount={refs.length}
-          filteredCount={filtered.length}
-          onCreateCollection={handleCreateCollection}
-          onDeleteCollection={handleDeleteCollection}
-        />
-
-        {/* Main grid */}
-        <main className="flex-1 min-w-0">
-          {filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-24 text-center">
-              {refs.length === 0 ? (
-                <>
-                  <div className="text-zinc-200 mb-4">
-                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
-                      <rect x="3" y="3" width="18" height="18" rx="2" />
-                      <line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" />
-                    </svg>
-                  </div>
-                  <p className="text-zinc-500 font-medium">레퍼런스가 없습니다</p>
-                  <p className="text-zinc-400 text-sm mt-1">우측 상단 버튼으로 첫 레퍼런스를 추가해 보세요</p>
-                  <button
-                    onClick={() => setShowUpload(true)}
-                    className="mt-4 bg-zinc-900 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-zinc-700 transition-colors"
-                  >
-                    레퍼런스 추가
-                  </button>
-                </>
+        {tab === 'refs' ? (
+          <>
+            <FilterPanel
+              filters={filters}
+              onFilterChange={setFilters}
+              collections={collections}
+              totalCount={regularRefs.length}
+              filteredCount={filtered.length}
+              onCreateCollection={handleCreateCollection}
+              onDeleteCollection={handleDeleteCollection}
+            />
+            <main className="flex-1 min-w-0">
+              {filtered.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-24 text-center">
+                  {regularRefs.length === 0 ? (
+                    <>
+                      <div className="text-zinc-200 mb-4">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+                          <rect x="3" y="3" width="18" height="18" rx="2" />
+                          <line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" />
+                        </svg>
+                      </div>
+                      <p className="text-zinc-500 font-medium">레퍼런스가 없습니다</p>
+                      <p className="text-zinc-400 text-sm mt-1">우측 상단 버튼으로 첫 레퍼런스를 추가해 보세요</p>
+                      <button onClick={() => setShowUpload(true)} className="mt-4 bg-zinc-900 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-zinc-700 transition-colors">
+                        레퍼런스 추가
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-zinc-500 font-medium">검색 결과가 없습니다</p>
+                      <p className="text-zinc-400 text-sm mt-1">필터 조건을 변경해 보세요</p>
+                    </>
+                  )}
+                </div>
               ) : (
-                <>
-                  <p className="text-zinc-500 font-medium">검색 결과가 없습니다</p>
-                  <p className="text-zinc-400 text-sm mt-1">필터 조건을 변경해 보세요</p>
-                </>
+                <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {filtered.map(ref => (
+                    <ReferenceCard
+                      key={ref.id}
+                      ref_={ref}
+                      collections={collections}
+                      onDelete={handleDelete}
+                      onCollectionToggle={handleCollectionToggle}
+                    />
+                  ))}
+                </div>
               )}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filtered.map(ref => (
-                <ReferenceCard
-                  key={ref.id}
-                  ref_={ref}
-                  collections={collections}
-                  onDelete={handleDelete}
-                  onCollectionToggle={handleCollectionToggle}
-                />
-              ))}
-            </div>
-          )}
-        </main>
+            </main>
+          </>
+        ) : (
+          <CompetitionView
+            refs={competitionRefs}
+            onStatusChange={handleCompetitionStatusChange}
+            onDelete={handleDelete}
+          />
+        )}
       </div>
 
-      {/* Upload modal */}
       {showUpload && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center overflow-y-auto py-8">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 p-6">

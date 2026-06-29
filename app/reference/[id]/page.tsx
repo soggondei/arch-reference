@@ -2,14 +2,33 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Reference, Collection } from '@/lib/types';
-import { getRefs, getCollections, updateRef, deleteRef } from '@/lib/store';
+import { Reference, Collection, CompetitionStatus, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR } from '@/lib/types';
+import { getRefs, getCollections, updateRef, deleteRef, updateCompetitionStatus } from '@/lib/store';
 import { TAG_LABELS, TagCategory } from '@/lib/tags';
 import TagBadge from '@/components/TagBadge';
 import SimilarPanel from '@/components/SimilarPanel';
 import Link from 'next/link';
 
 const TAG_CATEGORIES: TagCategory[] = ['program', 'material', 'mass', 'scale', 'designItem', 'site', 'region'];
+
+function InfoRow({ label, value }: { label: string; value?: string }) {
+  if (!value) return null;
+  return (
+    <div className="flex gap-3 text-sm leading-snug">
+      <span className="text-zinc-400 shrink-0 w-20">{label}</span>
+      <span className="text-zinc-700">{value}</span>
+    </div>
+  );
+}
+
+function getDDay(dateStr?: string): number | null {
+  if (!dateStr) return null;
+  const m = dateStr.match(/(\d{4}-\d{2}-\d{2})/);
+  if (!m) return null;
+  const deadline = new Date(m[1]);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return Math.ceil((deadline.getTime() - today.getTime()) / 86400000);
+}
 
 export default function ReferencePage() {
   const { id } = useParams<{ id: string }>();
@@ -19,6 +38,7 @@ export default function ReferencePage() {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [editingNote, setEditingNote] = useState(false);
   const [noteValue, setNoteValue] = useState('');
+  const [showStatusPicker, setShowStatusPicker] = useState(false);
 
   const load = useCallback(async () => {
     const [refs, cols] = await Promise.all([getRefs(), getCollections()]);
@@ -45,6 +65,14 @@ export default function ReferencePage() {
     router.push('/');
   }
 
+  async function handleStatusChange(status: CompetitionStatus) {
+    if (!ref_?.competitionData) return;
+    const updated = { ...ref_.competitionData, status };
+    await updateCompetitionStatus(id, updated);
+    setRef(r => r ? { ...r, competitionData: updated } : r);
+    setShowStatusPicker(false);
+  }
+
   if (!ref_) return (
     <div className="min-h-screen bg-zinc-50 flex items-center justify-center">
       <p className="text-zinc-400">레퍼런스를 찾을 수 없습니다.</p>
@@ -52,6 +80,8 @@ export default function ReferencePage() {
   );
 
   const cardCollections = collections.filter(c => ref_.collectionIds.includes(c.id));
+  const cd = ref_.competitionData;
+  const dday = getDDay(cd?.submissionDate);
 
   function getTagValues(category: TagCategory): string[] {
     const val = ref_!.tags[category];
@@ -100,6 +130,44 @@ export default function ReferencePage() {
           {/* 정보 */}
           <div className="flex flex-col gap-5">
             <div>
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                {/* 공모전 상태 뱃지 */}
+                {cd && (
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowStatusPicker(v => !v)}
+                      className="flex items-center gap-1 text-xs font-bold text-white px-2.5 py-1 rounded-full"
+                      style={{ backgroundColor: COMPETITION_STATUS_COLOR[cd.status] }}
+                    >
+                      {cd.status}
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+                    {showStatusPicker && (
+                      <div className="absolute left-0 top-8 z-20 bg-white rounded-xl shadow-lg border border-zinc-100 py-1 min-w-[130px]">
+                        {COMPETITION_STATUSES.map(s => (
+                          <button
+                            key={s}
+                            onClick={() => void handleStatusChange(s)}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-50 text-left"
+                          >
+                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: COMPETITION_STATUS_COLOR[s] }} />
+                            <span className={s === cd.status ? 'font-bold text-zinc-900' : 'text-zinc-600'}>{s}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* D-day */}
+                {dday !== null && (
+                  <span
+                    className="text-xs font-bold text-white px-2.5 py-1 rounded-full"
+                    style={{ backgroundColor: dday < 0 ? '#94a3b8' : dday <= 7 ? '#ef4444' : dday <= 30 ? '#f97316' : '#3b82f6' }}
+                  >
+                    {dday < 0 ? '마감' : dday === 0 ? 'D-Day' : `D-${dday}`}
+                  </span>
+                )}
+              </div>
               <h2 className="text-2xl font-bold text-zinc-900 leading-tight">{ref_.title}</h2>
               {(ref_.architect || ref_.year) && (
                 <p className="text-zinc-500 mt-1">{[ref_.architect, ref_.year].filter(Boolean).join(' · ')}</p>
@@ -113,6 +181,27 @@ export default function ReferencePage() {
               </a>
             )}
 
+            {/* 공모전 상세 정보 */}
+            {cd && (
+              <div className="grid grid-cols-2 gap-x-6 gap-y-0 border border-zinc-100 rounded-xl overflow-hidden">
+                <div className="px-4 py-3 border-r border-zinc-100 flex flex-col gap-2">
+                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">일정</p>
+                  <InfoRow label="공고일"   value={cd.announcementDate} />
+                  <InfoRow label="참가등록" value={cd.registrationDate} />
+                  <InfoRow label="작품접수" value={cd.submissionDate} />
+                  <InfoRow label="심사일"   value={cd.resultDate} />
+                </div>
+                <div className="px-4 py-3 flex flex-col gap-2">
+                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">규모 · 비용</p>
+                  <InfoRow label="연면적"   value={cd.floorAreaText} />
+                  <InfoRow label="설계비"   value={cd.designFee} />
+                  <InfoRow label="공사비"   value={cd.constructionCost} />
+                  <InfoRow label="위치"     value={cd.location} />
+                </div>
+              </div>
+            )}
+
+            {/* 태그 (공모전이 아닌 경우 또는 공모전이어도 태그 있으면) */}
             {hasTags && (
               <div className="flex flex-col gap-3">
                 {TAG_CATEGORIES.map(category => {
