@@ -127,13 +127,27 @@ function CompetitionView({
   refs,
   onStatusChange,
   onDelete,
+  onAutoFill,
 }: {
   refs: Reference[];
   onStatusChange: (id: string, status: CompetitionStatus) => void;
   onDelete: (id: string) => void;
+  onAutoFill?: () => Promise<void>;
 }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<CompetitionStatus | null>(null);
+  const [filling, setFilling] = useState(false);
+
+  const missingDataCount = refs.filter(r =>
+    r.sourceUrl?.includes('scorer.co.kr') &&
+    !r.competitionData?.submissionDate && !r.competitionData?.designFee
+  ).length;
+
+  async function handleAutoFill() {
+    if (!onAutoFill) return;
+    setFilling(true);
+    try { await onAutoFill(); } finally { setFilling(false); }
+  }
 
   const active = COMPETITION_STATUSES.slice(0, 5);
   const results = COMPETITION_STATUSES.slice(5);
@@ -187,6 +201,27 @@ function CompetitionView({
             </button>
           );
         })}
+        {missingDataCount > 0 && onAutoFill && (
+          <button
+            onClick={() => void handleAutoFill()}
+            disabled={filling}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-dashed border-zinc-300 text-zinc-500 hover:border-zinc-500 hover:text-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          >
+            {filling ? (
+              <>
+                <span className="w-3 h-3 border border-zinc-400 border-t-zinc-700 rounded-full animate-spin" />
+                불러오는 중...
+              </>
+            ) : (
+              <>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                자동 불러오기 ({missingDataCount}건)
+              </>
+            )}
+          </button>
+        )}
         {totalFee > 0 && (
           <span className="ml-auto text-xs text-zinc-400">진행 중 설계비 합계 약 {totalFee.toFixed(1)}억</span>
         )}
@@ -302,6 +337,27 @@ export default function Home() {
       : [...ref.collectionIds, colId];
     await updateRef({ ...ref, collectionIds });
     void load();
+  }
+
+  async function handleAutoFill() {
+    const missing = competitionRefs.filter(r =>
+      r.sourceUrl?.includes('scorer.co.kr') &&
+      !r.competitionData?.submissionDate && !r.competitionData?.designFee
+    );
+    const CONCURRENCY = 3;
+    for (let i = 0; i < missing.length; i += CONCURRENCY) {
+      await Promise.all(missing.slice(i, i + CONCURRENCY).map(async r => {
+        try {
+          const res = await fetch(`/api/scorer-fetch-one?url=${encodeURIComponent(r.sourceUrl!)}`);
+          if (!res.ok) return;
+          const { competitionData: fetched } = await res.json();
+          if (!fetched) return;
+          const updated = { ...r.competitionData!, ...fetched };
+          await updateCompetitionStatus(r.id, updated);
+          setRefs(prev => prev.map(x => x.id === r.id ? { ...x, competitionData: updated } : x));
+        } catch { /* skip */ }
+      }));
+    }
   }
 
   async function handleCompetitionStatusChange(id: string, status: CompetitionStatus) {
@@ -451,6 +507,7 @@ export default function Home() {
             refs={competitionRefs}
             onStatusChange={handleCompetitionStatusChange}
             onDelete={handleDelete}
+            onAutoFill={handleAutoFill}
           />
         )}
       </div>
