@@ -152,6 +152,7 @@ export default function ScorerImportPage() {
   const [selectedColId, setSelectedColId] = useState<string>('');
   const [newColName, setNewColName] = useState('');
   const [showNewCol, setShowNewCol] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
   const itemsRef = useRef<ScorerImportItem[]>([]); // stale closure 방지용 ref
 
   // 필터 적용
@@ -275,32 +276,51 @@ export default function ScorerImportPage() {
   async function importSelected() {
     const toImport = filtered.filter(item => states[item.id]?.checked && !states[item.id]?.saved);
     if (!toImport.length) return;
+
+    setImportProgress({ done: 0, total: toImport.length });
     const newStates = { ...states };
-    await Promise.all(toImport.map(async item => {
-      const ref: Reference = {
-        id: generateId(),
-        title: item.title,
-        imageUrl: '',
-        sourceUrl: item.sourceUrl,
-        architect: item.architect || undefined,
-        year: item.year ? parseInt(item.year) : undefined,
-        refType: item.refType as RefType,
-        tags: {
-          program: item.suggestedTags.program || [],
-          material: item.suggestedTags.material || [],
-          mass: item.suggestedTags.mass || [],
-          scale: item.suggestedTags.scale || '',
-          designItem: item.suggestedTags.designItem || [],
-          site: item.suggestedTags.site || [],
-          region: item.suggestedTags.region || '',
-        },
-        collectionIds: selectedColId ? [selectedColId] : [],
-        createdAt: new Date().toISOString(),
-      };
-      await addRef(ref);
-      newStates[item.id] = { checked: true, saved: true };
-    }));
+    const CONCURRENCY = 3;
+
+    for (let i = 0; i < toImport.length; i += CONCURRENCY) {
+      const batch = toImport.slice(i, i + CONCURRENCY);
+      await Promise.all(batch.map(async item => {
+        let imageUrl = '';
+        try {
+          const res = await fetch(`/api/fetch-og?url=${encodeURIComponent(item.sourceUrl)}`);
+          if (res.ok) {
+            const data = await res.json();
+            imageUrl = data.imageUrl || '';
+          }
+        } catch { /* 이미지 없이 저장 */ }
+
+        const ref: Reference = {
+          id: generateId(),
+          title: item.title,
+          imageUrl,
+          sourceUrl: item.sourceUrl,
+          architect: item.architect || undefined,
+          year: item.year ? parseInt(item.year) : undefined,
+          refType: item.refType as RefType,
+          tags: {
+            program: item.suggestedTags.program || [],
+            material: item.suggestedTags.material || [],
+            mass: item.suggestedTags.mass || [],
+            scale: item.suggestedTags.scale || '',
+            designItem: item.suggestedTags.designItem || [],
+            site: item.suggestedTags.site || [],
+            region: item.suggestedTags.region || '',
+          },
+          collectionIds: selectedColId ? [selectedColId] : [],
+          createdAt: new Date().toISOString(),
+        };
+        await addRef(ref);
+        newStates[item.id] = { checked: true, saved: true };
+        setImportProgress(prev => prev ? { ...prev, done: prev.done + 1 } : null);
+      }));
+    }
+
     setStates({ ...newStates });
+    setImportProgress(null);
   }
 
   const checkedCount = filtered.filter(item => states[item.id]?.checked && !states[item.id]?.saved).length;
@@ -510,12 +530,14 @@ export default function ScorerImportPage() {
                   </button>
                   <button
                     onClick={() => void importSelected()}
-                    disabled={checkedCount === 0}
-                    className="px-4 py-2 bg-zinc-900 text-white text-sm font-medium rounded-xl hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    disabled={checkedCount === 0 || !!importProgress}
+                    className="px-4 py-2 bg-zinc-900 text-white text-sm font-medium rounded-xl hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors min-w-[140px] text-center"
                   >
-                    {selectedColId
-                      ? `"${collections.find(c => c.id === selectedColId)?.name}"에 ${checkedCount}건 저장`
-                      : `선택한 ${checkedCount}건 저장`}
+                    {importProgress
+                      ? `저장 중... ${importProgress.done}/${importProgress.total}`
+                      : selectedColId
+                        ? `"${collections.find(c => c.id === selectedColId)?.name}"에 ${checkedCount}건 저장`
+                        : `선택한 ${checkedCount}건 저장`}
                   </button>
                 </div>
               </div>
