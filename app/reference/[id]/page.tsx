@@ -39,6 +39,8 @@ export default function ReferencePage() {
   const [editingNote, setEditingNote] = useState(false);
   const [noteValue, setNoteValue] = useState('');
   const [showStatusPicker, setShowStatusPicker] = useState(false);
+  const [editingCompetition, setEditingCompetition] = useState(false);
+  const [competitionForm, setCompetitionForm] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     const [refs, cols] = await Promise.all([getRefs(), getCollections()]);
@@ -63,6 +65,39 @@ export default function ReferencePage() {
     if (!confirm('이 레퍼런스를 삭제하시겠습니까?')) return;
     await deleteRef(id);
     router.push('/');
+  }
+
+  function startEditingCompetition() {
+    const cd = ref_?.competitionData;
+    setCompetitionForm({
+      announcementDate: cd?.announcementDate ?? '',
+      registrationDate: cd?.registrationDate ?? '',
+      submissionDate: cd?.submissionDate ?? '',
+      resultDate: cd?.resultDate ?? '',
+      floorAreaText: cd?.floorAreaText ?? '',
+      designFee: cd?.designFee ?? '',
+      constructionCost: cd?.constructionCost ?? '',
+      location: cd?.location ?? '',
+    });
+    setEditingCompetition(true);
+  }
+
+  async function saveCompetitionData() {
+    if (!ref_?.competitionData) return;
+    const updated = {
+      ...ref_.competitionData,
+      announcementDate: competitionForm.announcementDate || undefined,
+      registrationDate: competitionForm.registrationDate || undefined,
+      submissionDate: competitionForm.submissionDate || undefined,
+      resultDate: competitionForm.resultDate || undefined,
+      floorAreaText: competitionForm.floorAreaText || undefined,
+      designFee: competitionForm.designFee || undefined,
+      constructionCost: competitionForm.constructionCost || undefined,
+      location: competitionForm.location || undefined,
+    };
+    await updateCompetitionStatus(id, updated);
+    setRef(r => r ? { ...r, competitionData: updated } : r);
+    setEditingCompetition(false);
   }
 
   async function handleStatusChange(status: CompetitionStatus) {
@@ -183,21 +218,64 @@ export default function ReferencePage() {
 
             {/* 공모전 상세 정보 */}
             {cd && (
-              <div className="grid grid-cols-2 gap-x-6 gap-y-0 border border-zinc-100 rounded-xl overflow-hidden">
-                <div className="px-4 py-3 border-r border-zinc-100 flex flex-col gap-2">
-                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">일정</p>
-                  <InfoRow label="공고일"   value={cd.announcementDate} />
-                  <InfoRow label="참가등록" value={cd.registrationDate} />
-                  <InfoRow label="작품접수" value={cd.submissionDate} />
-                  <InfoRow label="심사일"   value={cd.resultDate} />
+              <div className="border border-zinc-100 rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between px-4 pt-3 pb-1">
+                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">공모전 정보</p>
+                  {!editingCompetition ? (
+                    <button onClick={startEditingCompetition} className="text-xs text-zinc-400 hover:text-zinc-700 underline">수정</button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <button onClick={() => void saveCompetitionData()} className="text-xs bg-zinc-900 text-white px-2.5 py-1 rounded-lg hover:bg-zinc-700">저장</button>
+                      <button onClick={() => setEditingCompetition(false)} className="text-xs text-zinc-400 hover:text-zinc-700">취소</button>
+                    </div>
+                  )}
                 </div>
-                <div className="px-4 py-3 flex flex-col gap-2">
-                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">규모 · 비용</p>
-                  <InfoRow label="연면적"   value={cd.floorAreaText} />
-                  <InfoRow label="설계비"   value={cd.designFee} />
-                  <InfoRow label="공사비"   value={cd.constructionCost} />
-                  <InfoRow label="위치"     value={cd.location} />
-                </div>
+                {editingCompetition ? (
+                  <div className="grid grid-cols-2 gap-x-4 px-4 pb-4 pt-2">
+                    {[
+                      { key: 'announcementDate', label: '공고일', placeholder: '2026-01-01' },
+                      { key: 'floorAreaText', label: '연면적', placeholder: '3,600㎡' },
+                      { key: 'registrationDate', label: '참가등록', placeholder: '2026-01-15' },
+                      { key: 'designFee', label: '설계비', placeholder: '약 6.9억 원' },
+                      { key: 'submissionDate', label: '작품접수', placeholder: '2026-02-01' },
+                      { key: 'constructionCost', label: '공사비', placeholder: '약 50억 원' },
+                      { key: 'resultDate', label: '심사일', placeholder: '2026-03-01' },
+                      { key: 'location', label: '위치', placeholder: '서울시 종로구' },
+                    ].map(({ key, label, placeholder }) => (
+                      <div key={key} className="flex flex-col gap-1 mt-2">
+                        <label className="text-[11px] text-zinc-400">{label}</label>
+                        <input
+                          type="text"
+                          value={competitionForm[key] ?? ''}
+                          onChange={e => setCompetitionForm(f => ({ ...f, [key]: e.target.value }))}
+                          placeholder={placeholder}
+                          className="border border-zinc-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:border-zinc-400"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-0">
+                    <div className="px-4 py-2 border-r border-zinc-100 flex flex-col gap-2">
+                      <InfoRow label="공고일"   value={cd.announcementDate} />
+                      <InfoRow label="참가등록" value={cd.registrationDate} />
+                      <InfoRow label="작품접수" value={cd.submissionDate} />
+                      <InfoRow label="심사일"   value={cd.resultDate} />
+                      {!cd.announcementDate && !cd.registrationDate && !cd.submissionDate && !cd.resultDate && (
+                        <p className="text-xs text-zinc-300 py-1">일정 정보 없음</p>
+                      )}
+                    </div>
+                    <div className="px-4 py-2 flex flex-col gap-2">
+                      <InfoRow label="연면적"   value={cd.floorAreaText} />
+                      <InfoRow label="설계비"   value={cd.designFee} />
+                      <InfoRow label="공사비"   value={cd.constructionCost} />
+                      <InfoRow label="위치"     value={cd.location} />
+                      {!cd.floorAreaText && !cd.designFee && !cd.constructionCost && !cd.location && (
+                        <p className="text-xs text-zinc-300 py-1">규모·비용 정보 없음</p>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
