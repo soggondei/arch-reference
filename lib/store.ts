@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Reference, Collection } from './types';
+import { Reference, Collection, CompetitionData } from './types';
 
 // ── Row mappers ─────────────────────────────────────────────────────────────
 
@@ -17,6 +17,7 @@ function toRef(row: any): Reference {
     tags: row.tags ?? { program: [], material: [], mass: [], scale: '', designItem: [], site: [], region: '' },
     collectionIds: row.collection_ids ?? [],
     createdAt: row.created_at,
+    competitionData: row.competition_data ?? undefined,
   };
 }
 
@@ -55,6 +56,7 @@ export async function addRef(ref: Reference): Promise<void> {
     tags: ref.tags,
     collection_ids: ref.collectionIds,
     created_at: ref.createdAt,
+    competition_data: ref.competitionData ?? null,
   });
   if (error) throw error;
 }
@@ -72,8 +74,17 @@ export async function updateRef(updated: Reference): Promise<void> {
       description: updated.description || null,
       tags: updated.tags,
       collection_ids: updated.collectionIds,
+      competition_data: updated.competitionData ?? null,
     })
     .eq('id', updated.id);
+  if (error) throw error;
+}
+
+export async function updateCompetitionStatus(id: string, competitionData: CompetitionData): Promise<void> {
+  const { error } = await supabase
+    .from('refs')
+    .update({ competition_data: competitionData })
+    .eq('id', id);
   if (error) throw error;
 }
 

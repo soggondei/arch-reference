@@ -131,6 +131,9 @@ export default function Home() {
             </svg>
           </div>
           <div className="ml-auto flex items-center gap-2 shrink-0">
+            <Link href="/competitions" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden sm:block">
+              공모전 트래커
+            </Link>
             <Link href="/seoul-import" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden sm:block">
               서울시 공모전
             </Link>

@@ -8,11 +8,39 @@ export const REF_TYPE_LABEL: Record<RefType, string> = {
 };
 
 export const REF_TYPE_COLOR: Record<RefType, string> = {
-  built:  '#1d4ed8',  // 파랑
-  winner: '#15803d',  // 초록
-  entry:  '#b45309',  // 주황
-  idea:   '#7c3aed',  // 보라
+  built:  '#1d4ed8',
+  winner: '#15803d',
+  entry:  '#b45309',
+  idea:   '#7c3aed',
 };
+
+export const COMPETITION_STATUSES = ['관심', '등록예정', '등록완료', '작업중', '제출완료', '입선', '탈락'] as const;
+export type CompetitionStatus = typeof COMPETITION_STATUSES[number];
+
+export const COMPETITION_STATUS_COLOR: Record<CompetitionStatus, string> = {
+  '관심':    '#94a3b8',
+  '등록예정': '#3b82f6',
+  '등록완료': '#8b5cf6',
+  '작업중':  '#f97316',
+  '제출완료': '#eab308',
+  '입선':    '#22c55e',
+  '탈락':    '#ef4444',
+};
+
+export interface CompetitionData {
+  status: CompetitionStatus;
+  memo?: string;
+  submissionDate?: string;
+  registrationDate?: string;
+  announcementDate?: string;
+  resultDate?: string;
+  designFee?: string;
+  designFeeAmount?: number;
+  constructionCost?: string;
+  floorArea?: number;
+  floorAreaText?: string;
+  location?: string;
+}
 
 export interface Reference {
   id: string;
@@ -34,6 +62,7 @@ export interface Reference {
   description?: string;
   collectionIds: string[];
   createdAt: string;
+  competitionData?: CompetitionData;
 }
 
 export interface Collection {

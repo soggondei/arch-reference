@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo, useRef } from 'react';
-import { Reference, RefType, Collection } from '@/lib/types';
+import { Reference, RefType, Collection, CompetitionData } from '@/lib/types';
 import { COLLECTION_COLORS } from '@/lib/tags';
 import { addRef, generateId, getRefs, getCollections, addCollection } from '@/lib/store';
 import { ScorerImportItem } from '@/app/api/scorer-import/route';
@@ -293,6 +293,19 @@ export default function ScorerImportPage() {
           }
         } catch { /* 이미지 없이 저장 */ }
 
+        const competitionData: CompetitionData = {
+          status: '관심',
+          submissionDate: item.submissionDate || undefined,
+          registrationDate: item.registrationDate || undefined,
+          announcementDate: item.announcementDate || undefined,
+          resultDate: item.resultDate || undefined,
+          designFee: item.designFee || undefined,
+          designFeeAmount: parseDesignFee(item.designFee) || undefined,
+          constructionCost: item.constructionCost || undefined,
+          floorArea: item.floorArea || undefined,
+          floorAreaText: item.floorAreaText || undefined,
+          location: item.location || undefined,
+        };
         const ref: Reference = {
           id: generateId(),
           title: item.title,
@@ -312,6 +325,7 @@ export default function ScorerImportPage() {
           },
           collectionIds: selectedColId ? [selectedColId] : [],
           createdAt: new Date().toISOString(),
+          competitionData,
         };
         await addRef(ref);
         newStates[item.id] = { checked: true, saved: true };

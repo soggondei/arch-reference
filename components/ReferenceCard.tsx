@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Reference, Collection, REF_TYPE_LABEL, REF_TYPE_COLOR, RefType } from '@/lib/types';
+import { Reference, Collection, REF_TYPE_LABEL, REF_TYPE_COLOR, RefType, COMPETITION_STATUS_COLOR } from '@/lib/types';
 import TagBadge from './TagBadge';
 import Link from 'next/link';
 
@@ -37,6 +37,16 @@ export default function ReferenceCard({ ref_, collections, onDelete, onCollectio
 
   const cardCollections = collections.filter(c => ref_.collectionIds.includes(c.id));
 
+  const cd = ref_.competitionData;
+  const dday = (() => {
+    if (!cd?.submissionDate) return null;
+    const m = cd.submissionDate.match(/(\d{4}-\d{2}-\d{2})/);
+    if (!m) return null;
+    const deadline = new Date(m[1]);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return Math.ceil((deadline.getTime() - today.getTime()) / 86400000);
+  })();
+
   return (
     <div className="group relative bg-white rounded-xl overflow-hidden border border-zinc-100 hover:border-zinc-300 hover:shadow-lg transition-all duration-200">
       <Link href={`/reference/${ref_.id}`}>
@@ -58,24 +68,40 @@ export default function ReferenceCard({ ref_, collections, onDelete, onCollectio
               </svg>
             </div>
           )}
-          {ref_.refType && (
+          {/* 좌측 상단: 유형 뱃지 + 공모전 상태 */}
+          <div className="absolute top-2 left-2 flex flex-col gap-1">
+            {ref_.refType && (
+              <span
+                className="text-xs font-semibold text-white px-1.5 py-0.5 rounded shadow w-fit"
+                style={{ backgroundColor: REF_TYPE_COLOR[ref_.refType as RefType] }}
+              >
+                {REF_TYPE_LABEL[ref_.refType as RefType]}
+              </span>
+            )}
+            {cd?.status && (
+              <span
+                className="text-xs font-semibold text-white px-1.5 py-0.5 rounded shadow w-fit"
+                style={{ backgroundColor: COMPETITION_STATUS_COLOR[cd.status] }}
+              >
+                {cd.status}
+              </span>
+            )}
+            {cardCollections.length > 0 && (
+              <div className="flex gap-1 mt-0.5">
+                {cardCollections.map(c => (
+                  <span key={c.id} className="w-2.5 h-2.5 rounded-full border-2 border-white shadow" style={{ backgroundColor: c.color }} />
+                ))}
+              </div>
+            )}
+          </div>
+          {/* 우측 하단: D-day */}
+          {dday !== null && (
             <span
-              className="absolute top-2 left-2 text-xs font-semibold text-white px-1.5 py-0.5 rounded shadow"
-              style={{ backgroundColor: REF_TYPE_COLOR[ref_.refType as RefType] }}
+              className="absolute bottom-2 right-2 text-xs font-bold text-white px-1.5 py-0.5 rounded shadow"
+              style={{ backgroundColor: dday < 0 ? '#94a3b8' : dday <= 7 ? '#ef4444' : dday <= 30 ? '#f97316' : '#3b82f6' }}
             >
-              {REF_TYPE_LABEL[ref_.refType as RefType]}
+              {dday < 0 ? '마감' : dday === 0 ? 'D-Day' : `D-${dday}`}
             </span>
-          )}
-          {cardCollections.length > 0 && (
-            <div className={`absolute ${ref_.refType ? 'top-8' : 'top-2'} left-2 flex gap-1`}>
-              {cardCollections.map(c => (
-                <span
-                  key={c.id}
-                  className="w-2.5 h-2.5 rounded-full border-2 border-white shadow"
-                  style={{ backgroundColor: c.color }}
-                />
-              ))}
-            </div>
           )}
         </div>
       </Link>
