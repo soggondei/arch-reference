@@ -14,12 +14,13 @@ interface ImportState {
 
 interface FilterState {
   statuses: string[];
+  competitionTypes: string[];
   categories: string[];
   scales: string[];
   fees: string[];
 }
 
-const INIT_FILTER: FilterState = { statuses: [], categories: [], scales: [], fees: [] };
+const INIT_FILTER: FilterState = { statuses: [], competitionTypes: [], categories: [], scales: [], fees: [] };
 const BATCH_PAGES = 5; // 한 번에 로드할 페이지 수 (5 × 20 = 100건)
 const PAGE_UNIT = 20;
 
@@ -172,6 +173,7 @@ export default function ScorerImportPage() {
   // 필터 적용
   const filtered = useMemo(() => items.filter(item => {
     if (filters.statuses.length && !filters.statuses.includes(item.status)) return false;
+    if (filters.competitionTypes.length && !filters.competitionTypes.includes(item.competitionType)) return false;
     if (filters.categories.length && !filters.categories.includes(item.category)) return false;
     if (filters.scales.length) {
       if (!filters.scales.some(s => {
@@ -189,8 +191,9 @@ export default function ScorerImportPage() {
     return true;
   }), [items, filters]);
 
-  const availableStatuses  = useMemo(() => [...new Set(items.map(i => i.status))].filter(Boolean), [items]);
-  const availableCategories = useMemo(() => [...new Set(items.map(i => i.category))].filter(Boolean).sort(), [items]);
+  const availableStatuses        = useMemo(() => [...new Set(items.map(i => i.status))].filter(Boolean), [items]);
+  const availableCompetitionTypes = useMemo(() => [...new Set(items.map(i => i.competitionType))].filter(Boolean).sort(), [items]);
+  const availableCategories       = useMemo(() => [...new Set(items.map(i => i.category))].filter(Boolean).sort(), [items]);
   const hasFilter = Object.values(filters).some(v => (v as string[]).length > 0);
 
   function toggle<K extends keyof FilterState>(key: K, value: string) {
@@ -438,6 +441,17 @@ export default function ScorerImportPage() {
                   ))}
                 </div>
               </div>
+
+              {availableCompetitionTypes.length > 0 && (
+                <div className="flex items-start gap-3">
+                  <span className="text-xs font-semibold text-zinc-500 w-14 pt-0.5 shrink-0">공모방식</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {availableCompetitionTypes.map(t => (
+                      <Chip key={t} label={t} active={filters.competitionTypes.includes(t)} onClick={() => toggle('competitionTypes', t)} />
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {availableCategories.length > 0 && (
                 <div className="flex items-start gap-3">
