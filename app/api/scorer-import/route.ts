@@ -2,16 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { autoTag } from '@/lib/auto-tag';
 import { RefType, JudgeMember } from '@/lib/types';
 
-function parseJudges(text: string): JudgeMember[] {
-  if (!text.trim()) return [];
-  const entries = text.split(/[,，]/).map(s => s.trim()).filter(Boolean);
-  return entries
-    .map(entry => {
-      const m = entry.match(/^(.+?)\s*[（(]([^)）]+)[)）]\s*$/);
-      if (m) return { name: m[1].trim(), affiliation: m[2].trim() };
-      return { name: entry.trim() };
-    })
-    .filter(j => j.name.length > 0 && j.name.length < 40);
+function parseJuriesFromHtml(html: string): JudgeMember[] {
+  const judges: JudgeMember[] = [];
+  const re = /<a class="go_to_jury"[\s\S]*?<\/a>/g;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const block = m[0];
+    const nameM = block.match(/<div class="name">\s*<span>([^<]+)<\/span>/);
+    const profM  = block.match(/<div class="profile">\s*<span>([^<]+)<\/span>/);
+    if (nameM) {
+      const name = nameM[1].trim();
+      if (name && name.length < 40) {
+        judges.push({ name, affiliation: profM ? profM[1].trim() : undefined });
+      }
+    }
+  }
+  return judges;
 }
 
 export interface ScorerImportItem {
@@ -196,7 +202,7 @@ async function fetchItem(entry: SitemapEntry): Promise<ScorerImportItem | null> 
       submissionFormat: fields.get('제출물 형식') || '',
       judgeDate: fields.get('심사일') || '',
       resultDate: fields.get('당선작 발표일') || '',
-      judges: parseJudges(fields.get('심사위원') || fields.get('심사위원단') || ''),
+      judges: parseJuriesFromHtml(html),
       refType: 'entry' as RefType,
       sourceUrl: url,
       suggestedTags: suggested,

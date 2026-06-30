@@ -1,16 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { CompetitionData, JudgeMember } from '@/lib/types';
 
-function parseJudges(text: string): JudgeMember[] {
-  if (!text.trim()) return [];
-  const entries = text.split(/[,，]/).map(s => s.trim()).filter(Boolean);
-  return entries
-    .map(entry => {
-      const m = entry.match(/^(.+?)\s*[（(]([^)）]+)[)）]\s*$/);
-      if (m) return { name: m[1].trim(), affiliation: m[2].trim() };
-      return { name: entry.trim() };
-    })
-    .filter(j => j.name.length > 0 && j.name.length < 40);
+function parseJuriesFromHtml(html: string): JudgeMember[] {
+  const judges: JudgeMember[] = [];
+  const re = /<a class="go_to_jury"[\s\S]*?<\/a>/g;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const block = m[0];
+    const nameM = block.match(/<div class="name">\s*<span>([^<]+)<\/span>/);
+    const profM  = block.match(/<div class="profile">\s*<span>([^<]+)<\/span>/);
+    if (nameM) {
+      const name = nameM[1].trim();
+      if (name && name.length < 40) {
+        judges.push({ name, affiliation: profM ? profM[1].trim() : undefined });
+      }
+    }
+  }
+  return judges;
 }
 
 function parseDtDd(html: string): Map<string, string> {
@@ -64,8 +70,7 @@ export async function GET(req: NextRequest) {
     const designFeeM = designFee.match(/([\d,.]+)억/);
     const designFeeAmount = designFeeM ? parseFloat(designFeeM[1].replace(/,/g, '')) : undefined;
 
-    const judgesRaw = fields.get('심사위원') || fields.get('심사위원단') || '';
-    const judges = parseJudges(judgesRaw);
+    const judges = parseJuriesFromHtml(html);
 
     const competitionData: Partial<CompetitionData> = {
       announcementDate: fields.get('공고일') || undefined,
