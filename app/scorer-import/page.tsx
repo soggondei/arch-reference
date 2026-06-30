@@ -128,6 +128,20 @@ function ScorerCard({ item, state, onToggle }: { item: ScorerImportItem; state: 
         </div>
       )}
 
+      {item.judges && item.judges.length > 0 && (
+        <div className="px-3 py-2 border-t border-zinc-100">
+          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">심사위원</p>
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+            {item.judges.map((j, i) => (
+              <span key={i} className="text-xs leading-snug">
+                <span className="text-zinc-700 font-medium">{j.name}</span>
+                {j.affiliation && <span className="text-zinc-400 ml-0.5">({j.affiliation})</span>}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="px-3 pb-3 pt-2 border-t border-zinc-100 flex flex-wrap gap-1">
         {[...item.suggestedTags.program, item.suggestedTags.scale, item.suggestedTags.region]
           .filter(Boolean)
@@ -305,6 +319,7 @@ export default function ScorerImportPage() {
           floorArea: item.floorArea || undefined,
           floorAreaText: item.floorAreaText || undefined,
           location: item.location || undefined,
+          judges: item.judges && item.judges.length > 0 ? item.judges : undefined,
         };
         const ref: Reference = {
           id: generateId(),

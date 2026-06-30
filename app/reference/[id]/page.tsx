@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Reference, Collection, CompetitionStatus, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR } from '@/lib/types';
+import { Reference, Collection, CompetitionStatus, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, JudgeMember } from '@/lib/types';
 import { getRefs, getCollections, updateRef, deleteRef, updateCompetitionStatus } from '@/lib/store';
 import { TAG_LABELS, TagCategory } from '@/lib/tags';
 import TagBadge from '@/components/TagBadge';
@@ -78,12 +78,14 @@ export default function ReferencePage() {
       designFee: cd?.designFee ?? '',
       constructionCost: cd?.constructionCost ?? '',
       location: cd?.location ?? '',
+      judgesText: cd?.judges ? judgesText(cd.judges) : '',
     });
     setEditingCompetition(true);
   }
 
   async function saveCompetitionData() {
     if (!ref_?.competitionData) return;
+    const parsedJudges = parseJudgesFromText(competitionForm.judgesText || '');
     const updated = {
       ...ref_.competitionData,
       announcementDate: competitionForm.announcementDate || undefined,
@@ -94,6 +96,7 @@ export default function ReferencePage() {
       designFee: competitionForm.designFee || undefined,
       constructionCost: competitionForm.constructionCost || undefined,
       location: competitionForm.location || undefined,
+      judges: parsedJudges.length > 0 ? parsedJudges : undefined,
     };
     await updateCompetitionStatus(id, updated);
     setRef(r => r ? { ...r, competitionData: updated } : r);
@@ -116,7 +119,20 @@ export default function ReferencePage() {
 
   const cardCollections = collections.filter(c => ref_.collectionIds.includes(c.id));
   const cd = ref_.competitionData;
-  const dday = getDDay(cd?.submissionDate);
+  const ddayReg = getDDay(cd?.registrationDate);
+  const ddaySub = getDDay(cd?.submissionDate);
+
+  function judgesText(judges: JudgeMember[]): string {
+    return judges.map(j => j.affiliation ? `${j.name} (${j.affiliation})` : j.name).join('\n');
+  }
+
+  function parseJudgesFromText(text: string): JudgeMember[] {
+    return text.split('\n').map(line => line.trim()).filter(Boolean).map(line => {
+      const m = line.match(/^(.+?)\s*[（(]([^)）]+)[)）]\s*$/);
+      if (m) return { name: m[1].trim(), affiliation: m[2].trim() };
+      return { name: line };
+    }).filter(j => j.name.length > 0);
+  }
 
   function getTagValues(category: TagCategory): string[] {
     const val = ref_!.tags[category];
@@ -193,13 +209,19 @@ export default function ReferencePage() {
                     )}
                   </div>
                 )}
-                {/* D-day */}
-                {dday !== null && (
-                  <span
-                    className="text-xs font-bold text-white px-2.5 py-1 rounded-full"
-                    style={{ backgroundColor: dday < 0 ? '#94a3b8' : dday <= 7 ? '#ef4444' : dday <= 30 ? '#f97316' : '#3b82f6' }}
-                  >
-                    {dday < 0 ? '마감' : dday === 0 ? 'D-Day' : `D-${dday}`}
+                {/* D-days */}
+                {ddayReg !== null && (
+                  <span className="flex items-center gap-1 text-xs font-bold text-white px-2.5 py-1 rounded-full"
+                    style={{ backgroundColor: ddayReg < 0 ? '#94a3b8' : ddayReg <= 7 ? '#ef4444' : ddayReg <= 30 ? '#f97316' : '#3b82f6' }}>
+                    <span className="font-normal opacity-80">등록</span>
+                    {ddayReg < 0 ? '마감' : ddayReg === 0 ? 'D-Day' : `D-${ddayReg}`}
+                  </span>
+                )}
+                {ddaySub !== null && (
+                  <span className="flex items-center gap-1 text-xs font-bold text-white px-2.5 py-1 rounded-full"
+                    style={{ backgroundColor: ddaySub < 0 ? '#94a3b8' : ddaySub <= 7 ? '#ef4444' : ddaySub <= 30 ? '#f97316' : '#3b82f6' }}>
+                    <span className="font-normal opacity-80">제출</span>
+                    {ddaySub < 0 ? '마감' : ddaySub === 0 ? 'D-Day' : `D-${ddaySub}`}
                   </span>
                 )}
               </div>
@@ -231,50 +253,77 @@ export default function ReferencePage() {
                   )}
                 </div>
                 {editingCompetition ? (
-                  <div className="grid grid-cols-2 gap-x-4 px-4 pb-4 pt-2">
-                    {[
-                      { key: 'announcementDate', label: '공고일', placeholder: '2026-01-01' },
-                      { key: 'floorAreaText', label: '연면적', placeholder: '3,600㎡' },
-                      { key: 'registrationDate', label: '참가등록', placeholder: '2026-01-15' },
-                      { key: 'designFee', label: '설계비', placeholder: '약 6.9억 원' },
-                      { key: 'submissionDate', label: '작품접수', placeholder: '2026-02-01' },
-                      { key: 'constructionCost', label: '공사비', placeholder: '약 50억 원' },
-                      { key: 'resultDate', label: '심사일', placeholder: '2026-03-01' },
-                      { key: 'location', label: '위치', placeholder: '서울시 종로구' },
-                    ].map(({ key, label, placeholder }) => (
-                      <div key={key} className="flex flex-col gap-1 mt-2">
-                        <label className="text-[11px] text-zinc-400">{label}</label>
-                        <input
-                          type="text"
-                          value={competitionForm[key] ?? ''}
-                          onChange={e => setCompetitionForm(f => ({ ...f, [key]: e.target.value }))}
-                          placeholder={placeholder}
-                          className="border border-zinc-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:border-zinc-400"
-                        />
-                      </div>
-                    ))}
+                  <div className="px-4 pb-4 pt-2 flex flex-col gap-3">
+                    <div className="grid grid-cols-2 gap-x-4">
+                      {[
+                        { key: 'announcementDate', label: '공고일', placeholder: '2026-01-01' },
+                        { key: 'floorAreaText', label: '연면적', placeholder: '3,600㎡' },
+                        { key: 'registrationDate', label: '참가등록', placeholder: '2026-01-15' },
+                        { key: 'designFee', label: '설계비', placeholder: '약 6.9억 원' },
+                        { key: 'submissionDate', label: '작품접수', placeholder: '2026-02-01' },
+                        { key: 'constructionCost', label: '공사비', placeholder: '약 50억 원' },
+                        { key: 'resultDate', label: '심사일', placeholder: '2026-03-01' },
+                        { key: 'location', label: '위치', placeholder: '서울시 종로구' },
+                      ].map(({ key, label, placeholder }) => (
+                        <div key={key} className="flex flex-col gap-1 mt-2">
+                          <label className="text-[11px] text-zinc-400">{label}</label>
+                          <input
+                            type="text"
+                            value={competitionForm[key] ?? ''}
+                            onChange={e => setCompetitionForm(f => ({ ...f, [key]: e.target.value }))}
+                            placeholder={placeholder}
+                            className="border border-zinc-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:border-zinc-400"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex flex-col gap-1 mt-1">
+                      <label className="text-[11px] text-zinc-400">심사위원 (한 줄에 한 명, 형식: 이름 (소속))</label>
+                      <textarea
+                        rows={3}
+                        value={competitionForm.judgesText ?? ''}
+                        onChange={e => setCompetitionForm(f => ({ ...f, judgesText: e.target.value }))}
+                        placeholder={'홍길동 (서울대학교)\n김철수 (연세대학교)'}
+                        className="border border-zinc-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:border-zinc-400 resize-none"
+                      />
+                    </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-0">
-                    <div className="px-4 py-2 border-r border-zinc-100 flex flex-col gap-2">
-                      <InfoRow label="공고일"   value={cd.announcementDate} />
-                      <InfoRow label="참가등록" value={cd.registrationDate} />
-                      <InfoRow label="작품접수" value={cd.submissionDate} />
-                      <InfoRow label="심사일"   value={cd.resultDate} />
-                      {!cd.announcementDate && !cd.registrationDate && !cd.submissionDate && !cd.resultDate && (
-                        <p className="text-xs text-zinc-300 py-1">일정 정보 없음</p>
-                      )}
+                  <>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-0">
+                      <div className="px-4 py-2 border-r border-zinc-100 flex flex-col gap-2">
+                        <InfoRow label="공고일"   value={cd.announcementDate} />
+                        <InfoRow label="참가등록" value={cd.registrationDate} />
+                        <InfoRow label="작품접수" value={cd.submissionDate} />
+                        <InfoRow label="심사일"   value={cd.resultDate} />
+                        {!cd.announcementDate && !cd.registrationDate && !cd.submissionDate && !cd.resultDate && (
+                          <p className="text-xs text-zinc-300 py-1">일정 정보 없음</p>
+                        )}
+                      </div>
+                      <div className="px-4 py-2 flex flex-col gap-2">
+                        <InfoRow label="연면적"   value={cd.floorAreaText} />
+                        <InfoRow label="설계비"   value={cd.designFee} />
+                        <InfoRow label="공사비"   value={cd.constructionCost} />
+                        <InfoRow label="위치"     value={cd.location} />
+                        {!cd.floorAreaText && !cd.designFee && !cd.constructionCost && !cd.location && (
+                          <p className="text-xs text-zinc-300 py-1">규모·비용 정보 없음</p>
+                        )}
+                      </div>
                     </div>
-                    <div className="px-4 py-2 flex flex-col gap-2">
-                      <InfoRow label="연면적"   value={cd.floorAreaText} />
-                      <InfoRow label="설계비"   value={cd.designFee} />
-                      <InfoRow label="공사비"   value={cd.constructionCost} />
-                      <InfoRow label="위치"     value={cd.location} />
-                      {!cd.floorAreaText && !cd.designFee && !cd.constructionCost && !cd.location && (
-                        <p className="text-xs text-zinc-300 py-1">규모·비용 정보 없음</p>
-                      )}
-                    </div>
-                  </div>
+                    {cd.judges && cd.judges.length > 0 && (
+                      <div className="px-4 py-3 border-t border-zinc-100">
+                        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">심사위원</p>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                          {cd.judges.map((j, i) => (
+                            <div key={i} className="text-xs leading-snug">
+                              <span className="font-medium text-zinc-700">{j.name}</span>
+                              {j.affiliation && <span className="text-zinc-400 ml-1">({j.affiliation})</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}

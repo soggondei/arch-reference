@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { autoTag } from '@/lib/auto-tag';
-import { RefType } from '@/lib/types';
+import { RefType, JudgeMember } from '@/lib/types';
+
+function parseJudges(text: string): JudgeMember[] {
+  if (!text.trim()) return [];
+  const entries = text.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+  return entries
+    .map(entry => {
+      const m = entry.match(/^(.+?)\s*[（(]([^)）]+)[)）]\s*$/);
+      if (m) return { name: m[1].trim(), affiliation: m[2].trim() };
+      return { name: entry.trim() };
+    })
+    .filter(j => j.name.length > 0 && j.name.length < 40);
+}
 
 export interface ScorerImportItem {
   id: number;
@@ -31,6 +43,7 @@ export interface ScorerImportItem {
   judgeDate: string;         // 심사일
   resultDate: string;        // 당선작 발표일
   // 공통
+  judges: JudgeMember[];
   refType: RefType;
   sourceUrl: string;
   suggestedTags: ReturnType<typeof autoTag>;
@@ -183,6 +196,7 @@ async function fetchItem(entry: SitemapEntry): Promise<ScorerImportItem | null> 
       submissionFormat: fields.get('제출물 형식') || '',
       judgeDate: fields.get('심사일') || '',
       resultDate: fields.get('당선작 발표일') || '',
+      judges: parseJudges(fields.get('심사위원') || fields.get('심사위원단') || ''),
       refType: 'entry' as RefType,
       sourceUrl: url,
       suggestedTags: suggested,

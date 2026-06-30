@@ -1,5 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { CompetitionData } from '@/lib/types';
+import { CompetitionData, JudgeMember } from '@/lib/types';
+
+function parseJudges(text: string): JudgeMember[] {
+  if (!text.trim()) return [];
+  const entries = text.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+  return entries
+    .map(entry => {
+      const m = entry.match(/^(.+?)\s*[（(]([^)）]+)[)）]\s*$/);
+      if (m) return { name: m[1].trim(), affiliation: m[2].trim() };
+      return { name: entry.trim() };
+    })
+    .filter(j => j.name.length > 0 && j.name.length < 40);
+}
 
 function parseDtDd(html: string): Map<string, string> {
   const result = new Map<string, string>();
@@ -52,6 +64,9 @@ export async function GET(req: NextRequest) {
     const designFeeM = designFee.match(/([\d,.]+)억/);
     const designFeeAmount = designFeeM ? parseFloat(designFeeM[1].replace(/,/g, '')) : undefined;
 
+    const judgesRaw = fields.get('심사위원') || fields.get('심사위원단') || '';
+    const judges = parseJudges(judgesRaw);
+
     const competitionData: Partial<CompetitionData> = {
       announcementDate: fields.get('공고일') || undefined,
       registrationDate: fields.get('참가등록일') || undefined,
@@ -63,6 +78,7 @@ export async function GET(req: NextRequest) {
       designFeeAmount,
       constructionCost: fields.get('공사비') || undefined,
       location: fields.get('위치') || (ogDesc.match(/위치\s*:\s*([^,]+)/)?.[1]?.trim() || undefined),
+      judges: judges.length > 0 ? judges : undefined,
     };
 
     return NextResponse.json({ competitionData, architect });

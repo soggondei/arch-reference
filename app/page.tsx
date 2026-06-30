@@ -37,6 +37,19 @@ function DDayBadge({ dday }: { dday: number | null }) {
   );
 }
 
+function DDayLabel({ label, dday }: { label: string; dday: number | null }) {
+  if (dday === null) return null;
+  const bg = dday < 0 ? '#94a3b8' : dday <= 7 ? '#ef4444' : dday <= 30 ? '#f97316' : '#3b82f6';
+  return (
+    <div className="flex items-center gap-1 shrink-0">
+      <span className="text-[9px] text-zinc-400 font-medium leading-none">{label}</span>
+      <span className="text-[10px] font-bold text-white px-1.5 py-0.5 rounded" style={{ backgroundColor: bg }}>
+        {dday < 0 ? '마감' : dday === 0 ? 'D-Day' : `D-${dday}`}
+      </span>
+    </div>
+  );
+}
+
 function CompetitionRow({
   ref_,
   onStatusChange,
@@ -47,7 +60,8 @@ function CompetitionRow({
   onDelete: (id: string) => void;
 }) {
   const cd = ref_.competitionData!;
-  const dday = getDDay(cd.submissionDate);
+  const ddayReg = getDDay(cd.registrationDate);
+  const ddaySub = getDDay(cd.submissionDate);
   const [showPicker, setShowPicker] = useState(false);
 
   return (
@@ -78,9 +92,11 @@ function CompetitionRow({
         )}
       </div>
 
-      {/* D-day */}
-      <div className="shrink-0 w-12 text-right">
-        <DDayBadge dday={dday} />
+      {/* D-days */}
+      <div className="shrink-0 flex flex-col items-end gap-0.5">
+        <DDayLabel label="등록" dday={ddayReg} />
+        <DDayLabel label="제출" dday={ddaySub} />
+        {ddayReg === null && ddaySub === null && <DDayBadge dday={null} />}
       </div>
 
       {/* 제목 */}
@@ -90,7 +106,13 @@ function CompetitionRow({
       </Link>
 
       {/* 날짜·비용 (넓은 화면) */}
-      <div className="hidden md:flex items-center gap-6 shrink-0 text-xs text-zinc-500">
+      <div className="hidden md:flex items-center gap-5 shrink-0 text-xs text-zinc-500">
+        {cd.registrationDate && (
+          <div className="text-right">
+            <p className="text-[10px] text-zinc-400">응모등록</p>
+            <p>{cd.registrationDate.slice(0, 10)}</p>
+          </div>
+        )}
         {cd.submissionDate && (
           <div className="text-right">
             <p className="text-[10px] text-zinc-400">작품접수</p>

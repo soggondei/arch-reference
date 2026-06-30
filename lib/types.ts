@@ -27,6 +27,11 @@ export const COMPETITION_STATUS_COLOR: Record<CompetitionStatus, string> = {
   '탈락':    '#ef4444',
 };
 
+export interface JudgeMember {
+  name: string;
+  affiliation?: string;
+}
+
 export interface CompetitionData {
   status: CompetitionStatus;
   memo?: string;
@@ -40,6 +45,7 @@ export interface CompetitionData {
   floorArea?: number;
   floorAreaText?: string;
   location?: string;
+  judges?: JudgeMember[];
 }
 
 export interface Reference {
