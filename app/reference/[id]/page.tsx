@@ -113,7 +113,7 @@ export default function ReferencePage() {
     setRef(r => r ? { ...r, competitionData: updated } : r);
     setShowStatusPicker(false);
 
-    if (status === '등록완료') {
+    if ((status === '등록예정' || status === '등록완료') && !updated.notionPageId) {
       setNotionSyncMsg('노션 등록 중...');
       try {
         const cd = updated;
@@ -134,9 +134,14 @@ export default function ReferencePage() {
             submissions: cd.submissions,
           }),
         });
-        const data = await res.json() as { url?: string; error?: string };
+        const data = await res.json() as { url?: string; pageId?: string; error?: string };
         if (res.ok && data.url) {
           setNotionSyncMsg(`✓ 노션 PROJECT MASTER에 등록됨`);
+          if (data.pageId) {
+            const withId = { ...updated, notionPageId: data.pageId };
+            await updateCompetitionStatus(id, withId);
+            setRef(r => r ? { ...r, competitionData: withId } : r);
+          }
         } else {
           setNotionSyncMsg(`노션 등록 실패: ${data.error ?? '알 수 없는 오류'}`);
         }

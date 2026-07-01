@@ -83,5 +83,5 @@ export async function POST(req: NextRequest) {
   const data = await res.json();
   if (!res.ok) return NextResponse.json({ error: data.message || '노션 생성 실패' }, { status: 500 });
 
-  return NextResponse.json({ url: data.url });
+  return NextResponse.json({ url: data.url, pageId: data.id });
 }

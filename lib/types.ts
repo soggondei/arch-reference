@@ -47,6 +47,7 @@ export interface CompetitionData {
   location?: string;
   judges?: JudgeMember[];
   submissions?: string;
+  notionPageId?: string;
 }
 
 export interface Reference {

@@ -389,7 +389,7 @@ export default function Home() {
     await updateCompetitionStatus(id, updated);
     setRefs(prev => prev.map(r => r.id === id ? { ...r, competitionData: updated } : r));
 
-    if (status === '등록완료') {
+    if ((status === '등록예정' || status === '등록완료') && !updated.notionPageId) {
       const cd = updated;
       fetch('/api/notion-project', {
         method: 'POST',
@@ -407,6 +407,15 @@ export default function Home() {
           sourceUrl: ref.sourceUrl,
           submissions: cd.submissions,
         }),
+      }).then(async r => {
+        if (r.ok) {
+          const data = await r.json() as { url?: string; pageId?: string };
+          if (data.pageId) {
+            const withId = { ...updated, notionPageId: data.pageId };
+            await updateCompetitionStatus(id, withId);
+            setRefs(prev => prev.map(x => x.id === id ? { ...x, competitionData: withId } : x));
+          }
+        }
       }).catch(() => {/* silent */});
     }
   }
