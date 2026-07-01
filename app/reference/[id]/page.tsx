@@ -41,6 +41,7 @@ export default function ReferencePage() {
   const [showStatusPicker, setShowStatusPicker] = useState(false);
   const [editingCompetition, setEditingCompetition] = useState(false);
   const [competitionForm, setCompetitionForm] = useState<Record<string, string>>({});
+  const [notionSyncMsg, setNotionSyncMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const [refs, cols] = await Promise.all([getRefs(), getCollections()]);
@@ -109,6 +110,34 @@ export default function ReferencePage() {
     await updateCompetitionStatus(id, updated);
     setRef(r => r ? { ...r, competitionData: updated } : r);
     setShowStatusPicker(false);
+
+    if (status === '등록완료') {
+      setNotionSyncMsg('노션 등록 중...');
+      try {
+        const cd = updated;
+        const res = await fetch('/api/notion-project', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: ref_.title,
+            architect: ref_.architect,
+            location: cd.location,
+            submissionDate: cd.submissionDate,
+            floorArea: cd.floorArea,
+            sourceUrl: ref_.sourceUrl,
+          }),
+        });
+        const data = await res.json() as { url?: string; error?: string };
+        if (res.ok && data.url) {
+          setNotionSyncMsg(`✓ 노션 PROJECT MASTER에 등록됨`);
+        } else {
+          setNotionSyncMsg(`노션 등록 실패: ${data.error ?? '알 수 없는 오류'}`);
+        }
+      } catch {
+        setNotionSyncMsg('노션 연결 오류');
+      }
+      setTimeout(() => setNotionSyncMsg(null), 4000);
+    }
   }
 
   if (!ref_) return (
@@ -144,6 +173,13 @@ export default function ReferencePage() {
 
   return (
     <div className="min-h-screen bg-zinc-50">
+      {notionSyncMsg && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl text-sm font-medium shadow-lg text-white transition-all ${
+          notionSyncMsg.startsWith('✓') ? 'bg-green-600' : notionSyncMsg.includes('중') ? 'bg-zinc-700' : 'bg-red-600'
+        }`}>
+          {notionSyncMsg}
+        </div>
+      )}
       <header className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-zinc-100">
         <div className="max-w-screen-lg mx-auto px-6 h-14 flex items-center gap-3">
           <Link href="/" className="text-zinc-400 hover:text-zinc-700 flex items-center gap-1.5 text-sm">
