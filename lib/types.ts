@@ -46,6 +46,7 @@ export interface CompetitionData {
   floorAreaText?: string;
   location?: string;
   judges?: JudgeMember[];
+  submissions?: string;
 }
 
 export interface Reference {

@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
     designFee,
     floorArea,
     sourceUrl,
+    submissions,
   } = await req.json() as {
     title: string;
     architect?: string;
@@ -35,6 +36,7 @@ export async function POST(req: NextRequest) {
     designFee?: string;
     floorArea?: number;
     sourceUrl?: string;
+    submissions?: string;
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,7 +51,8 @@ export async function POST(req: NextRequest) {
   if (architect)   properties['발주처 / 클라이언트'] = { rich_text: [{ text: { content: architect } }] };
   if (location)    properties['대지 위치']           = { rich_text: [{ text: { content: location } }] };
   if (floorArea)   properties['연면적 (㎡)']         = { number: floorArea };
-  if (sourceUrl)   properties['비고']                = { rich_text: [{ text: { content: sourceUrl } }] };
+  if (sourceUrl)    properties['비고']                 = { rich_text: [{ text: { content: sourceUrl } }] };
+  if (submissions)  properties['제출물']               = { rich_text: [{ text: { content: submissions } }] };
   if (designFee)   properties['설계비']              = { rich_text: [{ text: { content: designFee } }] };
 
   const sub = toDate(submissionDate);

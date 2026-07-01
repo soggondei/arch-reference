@@ -405,6 +405,7 @@ export default function Home() {
           designFee: cd.designFee,
           floorArea: cd.floorArea,
           sourceUrl: ref.sourceUrl,
+          submissions: cd.submissions,
         }),
       }).catch(() => {/* silent */});
     }

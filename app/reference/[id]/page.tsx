@@ -80,6 +80,7 @@ export default function ReferencePage() {
       constructionCost: cd?.constructionCost ?? '',
       location: cd?.location ?? '',
       judgesText: cd?.judges ? judgesText(cd.judges) : '',
+      submissions: cd?.submissions ?? '',
     });
     setEditingCompetition(true);
   }
@@ -98,6 +99,7 @@ export default function ReferencePage() {
       constructionCost: competitionForm.constructionCost || undefined,
       location: competitionForm.location || undefined,
       judges: parsedJudges.length > 0 ? parsedJudges : undefined,
+      submissions: competitionForm.submissions || undefined,
     };
     await updateCompetitionStatus(id, updated);
     setRef(r => r ? { ...r, competitionData: updated } : r);
@@ -129,6 +131,7 @@ export default function ReferencePage() {
             designFee: cd.designFee,
             floorArea: cd.floorArea,
             sourceUrl: ref_.sourceUrl,
+            submissions: cd.submissions,
           }),
         });
         const data = await res.json() as { url?: string; error?: string };
@@ -318,6 +321,16 @@ export default function ReferencePage() {
                       ))}
                     </div>
                     <div className="flex flex-col gap-1 mt-1">
+                      <label className="text-[11px] text-zinc-400">제출물 (쉼표로 구분)</label>
+                      <input
+                        type="text"
+                        value={competitionForm.submissions ?? ''}
+                        onChange={e => setCompetitionForm(f => ({ ...f, submissions: e.target.value }))}
+                        placeholder="배치도, 평면도, 입면도, 단면도, 투시도, 설계설명서"
+                        className="border border-zinc-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:border-zinc-400"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1 mt-1">
                       <label className="text-[11px] text-zinc-400">심사위원 (한 줄에 한 명, 형식: 이름 (소속))</label>
                       <textarea
                         rows={3}
@@ -350,6 +363,16 @@ export default function ReferencePage() {
                         )}
                       </div>
                     </div>
+                    {cd.submissions && (
+                      <div className="px-4 py-3 border-t border-zinc-100">
+                        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">제출물</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {cd.submissions.split(',').map((s, i) => (
+                            <span key={i} className="text-xs bg-zinc-100 text-zinc-600 px-2 py-0.5 rounded-full">{s.trim()}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {cd.judges && cd.judges.length > 0 && (
                       <div className="px-4 py-3 border-t border-zinc-100">
                         <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">심사위원</p>
