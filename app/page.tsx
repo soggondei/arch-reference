@@ -388,6 +388,22 @@ export default function Home() {
     const updated = { ...ref.competitionData, status };
     await updateCompetitionStatus(id, updated);
     setRefs(prev => prev.map(r => r.id === id ? { ...r, competitionData: updated } : r));
+
+    if (status === '등록완료') {
+      const cd = updated;
+      fetch('/api/notion-project', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: ref.title,
+          architect: ref.architect,
+          location: cd.location,
+          submissionDate: cd.submissionDate,
+          floorArea: cd.floorArea,
+          sourceUrl: ref.sourceUrl,
+        }),
+      }).catch(() => {/* silent */});
+    }
   }
 
   // 레퍼런스 vs 공모전 분리
