@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
   const properties: Record<string, any> = {
     '프로젝트 코드': { title: [{ text: { content: title } }] },
     '프로젝트명':    { rich_text: [{ text: { content: title } }] },
+    '분류':          { select: { name: '현상설계' } },
     '진행상태':      { select: { name: '수주검토' } },
     '발주유형':      { select: { name: '공모' } },
   };
