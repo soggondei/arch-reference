@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const properties: Record<string, any> = {
-    '프로젝트 코드': { title: [{ text: { content: '' } }] },
+    '프로젝트 코드': { title: [{ text: { content: title } }] },
     '프로젝트명':    { rich_text: [{ text: { content: title } }] },
     '진행상태':      { select: { name: '수주검토' } },
     '발주유형':      { select: { name: '공모' } },
