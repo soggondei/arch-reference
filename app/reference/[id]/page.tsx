@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Reference, Collection, CompetitionStatus, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, JudgeMember, ScheduleItem } from '@/lib/types';
 import { getRefs, getCollections, updateRef, deleteRef, updateCompetitionStatus } from '@/lib/store';
+import { generateScheduleTemplate } from '@/lib/schedule-template';
 import { TAG_LABELS, TagCategory } from '@/lib/tags';
 import TagBadge from '@/components/TagBadge';
 import SimilarPanel from '@/components/SimilarPanel';
@@ -116,10 +117,25 @@ export default function ReferencePage() {
 
   async function handleStatusChange(status: CompetitionStatus) {
     if (!ref_?.competitionData) return;
-    const updated = { ...ref_.competitionData, status };
+    let updated = { ...ref_.competitionData, status };
     await updateCompetitionStatus(id, updated);
     setRef(r => r ? { ...r, competitionData: updated } : r);
     setShowStatusPicker(false);
+
+    if (status === '등록완료' && (!updated.schedules || updated.schedules.length === 0)) {
+      const schedules = generateScheduleTemplate({
+        submissionDate: updated.submissionDate,
+        registrationDate: updated.registrationDate,
+        announcementDate: updated.announcementDate,
+        resultDate: updated.resultDate,
+      });
+      if (schedules.length > 0) {
+        const withSchedules = { ...updated, schedules };
+        await updateCompetitionStatus(id, withSchedules);
+        setRef(r => r ? { ...r, competitionData: withSchedules } : r);
+        updated = withSchedules;
+      }
+    }
 
     if ((status === '등록예정' || status === '등록완료') && !updated.notionPageId) {
       setNotionSyncMsg('노션 등록 중...');

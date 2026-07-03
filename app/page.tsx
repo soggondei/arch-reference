@@ -6,6 +6,7 @@ import { Reference, Collection, FilterState, CompetitionStatus, COMPETITION_STAT
 import { COLLECTION_COLORS } from '@/lib/tags';
 import { getRefs, getCollections, deleteRef, addCollection, deleteCollection, updateRef, generateId, updateCompetitionStatus } from '@/lib/store';
 import { autoTag } from '@/lib/auto-tag';
+import { generateScheduleTemplate } from '@/lib/schedule-template';
 import ReferenceCard from '@/components/ReferenceCard';
 import FilterPanel from '@/components/FilterPanel';
 import UploadForm from '@/components/UploadForm';
@@ -385,9 +386,24 @@ export default function Home() {
   async function handleCompetitionStatusChange(id: string, status: CompetitionStatus) {
     const ref = refs.find(r => r.id === id);
     if (!ref?.competitionData) return;
-    const updated = { ...ref.competitionData, status };
+    let updated = { ...ref.competitionData, status };
     await updateCompetitionStatus(id, updated);
     setRefs(prev => prev.map(r => r.id === id ? { ...r, competitionData: updated } : r));
+
+    if (status === '등록완료' && (!updated.schedules || updated.schedules.length === 0)) {
+      const schedules = generateScheduleTemplate({
+        submissionDate: updated.submissionDate,
+        registrationDate: updated.registrationDate,
+        announcementDate: updated.announcementDate,
+        resultDate: updated.resultDate,
+      });
+      if (schedules.length > 0) {
+        const withSchedules = { ...updated, schedules };
+        await updateCompetitionStatus(id, withSchedules);
+        setRefs(prev => prev.map(x => x.id === id ? { ...x, competitionData: withSchedules } : x));
+        updated = withSchedules;
+      }
+    }
 
     if ((status === '등록예정' || status === '등록완료') && !updated.notionPageId) {
       const cd = updated;
