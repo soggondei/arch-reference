@@ -85,3 +85,37 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ url: data.url, pageId: data.id });
 }
+
+// PATCH: 기존 프로젝트 페이지의 진행상태 업데이트
+export async function PATCH(req: NextRequest) {
+  const token = process.env.NOTION_TOKEN;
+  if (!token) return NextResponse.json({ error: 'NOTION_TOKEN 미설정' }, { status: 500 });
+
+  const { notionPageId, status } = await req.json() as { notionPageId: string; status: string };
+
+  const STATUS_MAP: Record<string, string> = {
+    '등록예정': '수주검토',
+    '등록완료': '수주검토',
+  };
+
+  const notionStatus = STATUS_MAP[status] ?? '수주검토';
+
+  const res = await fetch(`https://api.notion.com/v1/pages/${notionPageId}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Notion-Version': NOTION_VERSION,
+    },
+    body: JSON.stringify({
+      properties: {
+        '진행상태': { select: { name: notionStatus } },
+      },
+    }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) return NextResponse.json({ error: data.message || '업데이트 실패', notFound: res.status === 404 }, { status: res.status });
+
+  return NextResponse.json({ ok: true });
+}

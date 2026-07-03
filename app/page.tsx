@@ -437,34 +437,64 @@ export default function Home() {
       }
     }
 
-    if ((status === '등록예정' || status === '등록완료') && !updated.notionPageId) {
+    if (status === '등록예정' || status === '등록완료') {
       const cd = updated;
-      fetch('/api/notion-project', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: ref.title,
-          architect: ref.architect,
-          location: cd.location,
-          submissionDate: cd.submissionDate,
-          registrationDate: cd.registrationDate,
-          announcementDate: cd.announcementDate,
-          resultDate: cd.resultDate,
-          designFee: cd.designFee,
-          floorArea: cd.floorArea,
-          sourceUrl: ref.sourceUrl,
-          submissions: cd.submissions,
-        }),
-      }).then(async r => {
-        if (r.ok) {
-          const data = await r.json() as { url?: string; pageId?: string };
-          if (data.pageId) {
-            const withId = { ...updated, notionPageId: data.pageId };
-            await updateCompetitionStatus(id, withId);
-            setRefs(prev => prev.map(x => x.id === id ? { ...x, competitionData: withId } : x));
+      if (cd.notionPageId) {
+        // 기존 Notion 페이지 상태 업데이트
+        fetch('/api/notion-project', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ notionPageId: cd.notionPageId, status }),
+        }).then(async r => {
+          if (!r.ok) {
+            const err = await r.json() as { notFound?: boolean };
+            if (err.notFound) {
+              // 페이지가 삭제된 경우 새로 생성
+              const res = await fetch('/api/notion-project', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  title: ref.title, architect: ref.architect,
+                  location: cd.location, submissionDate: cd.submissionDate,
+                  registrationDate: cd.registrationDate, announcementDate: cd.announcementDate,
+                  resultDate: cd.resultDate, designFee: cd.designFee,
+                  floorArea: cd.floorArea, sourceUrl: ref.sourceUrl, submissions: cd.submissions,
+                }),
+              });
+              if (res.ok) {
+                const data = await res.json() as { pageId?: string };
+                if (data.pageId) {
+                  const withId = { ...updated, notionPageId: data.pageId };
+                  await updateCompetitionStatus(id, withId);
+                  setRefs(prev => prev.map(x => x.id === id ? { ...x, competitionData: withId } : x));
+                }
+              }
+            }
           }
-        }
-      }).catch(() => {/* silent */});
+        }).catch(() => {/* silent */});
+      } else {
+        // 신규 Notion 페이지 생성
+        fetch('/api/notion-project', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: ref.title, architect: ref.architect,
+            location: cd.location, submissionDate: cd.submissionDate,
+            registrationDate: cd.registrationDate, announcementDate: cd.announcementDate,
+            resultDate: cd.resultDate, designFee: cd.designFee,
+            floorArea: cd.floorArea, sourceUrl: ref.sourceUrl, submissions: cd.submissions,
+          }),
+        }).then(async r => {
+          if (r.ok) {
+            const data = await r.json() as { url?: string; pageId?: string };
+            if (data.pageId) {
+              const withId = { ...updated, notionPageId: data.pageId };
+              await updateCompetitionStatus(id, withId);
+              setRefs(prev => prev.map(x => x.id === id ? { ...x, competitionData: withId } : x));
+            }
+          }
+        }).catch(() => {/* silent */});
+      }
     }
   }
 
