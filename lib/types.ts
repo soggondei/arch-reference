@@ -55,6 +55,7 @@ export interface ScheduleItem {
   startDate?: string;
   endDate: string;
   status: ScheduleStatus;
+  isMilestone?: boolean;
   notionPageId?: string;
 }
 

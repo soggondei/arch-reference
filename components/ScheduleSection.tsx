@@ -276,13 +276,30 @@ export default function ScheduleSection({ refId, projectName, competitionData, o
       ) : (
         <div className="divide-y divide-zinc-50">
           {schedules.map(item => (
-            <div key={item.id} className="px-4 py-2.5 flex items-center gap-3 hover:bg-zinc-50/50 group">
-              {/* 카테고리 도트 */}
-              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: CATEGORY_COLOR[item.category] }} />
+            <div
+              key={item.id}
+              className={`px-4 py-2.5 flex items-center gap-3 group transition-colors ${
+                item.isMilestone ? 'bg-amber-50/60 hover:bg-amber-50' : 'hover:bg-zinc-50/50'
+              }`}
+            >
+              {/* 마일스톤 아이콘 또는 카테고리 도트 */}
+              {item.isMilestone ? (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="shrink-0 text-amber-400">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+              ) : (
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: CATEGORY_COLOR[item.category] }} />
+              )}
 
               {/* 태스크명 */}
               <div className="flex-1 min-w-0">
-                <p className={`text-sm font-medium truncate ${item.status === 'done' ? 'text-zinc-400 line-through' : 'text-zinc-800'}`}>
+                <p className={`text-sm truncate ${
+                  item.status === 'done'
+                    ? 'text-zinc-400 line-through'
+                    : item.isMilestone
+                    ? 'font-bold text-zinc-900'
+                    : 'font-medium text-zinc-800'
+                }`}>
                   {item.taskName}
                 </p>
                 <p className="text-[10px] text-zinc-400 mt-0.5">
