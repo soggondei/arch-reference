@@ -4,6 +4,12 @@ function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
+function extractDate(str?: string): string | undefined {
+  if (!str) return undefined;
+  const m = str.match(/(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : undefined;
+}
+
 function addDays(dateStr: string, days: number): string {
   const d = new Date(dateStr);
   d.setDate(d.getDate() + days);
@@ -48,32 +54,37 @@ export function generateScheduleTemplate(params: {
 }): ScheduleItem[] {
   const items: ScheduleItem[] = [];
 
+  const submissionDate   = extractDate(params.submissionDate);
+  const registrationDate = extractDate(params.registrationDate);
+  const announcementDate = extractDate(params.announcementDate);
+  const resultDate       = extractDate(params.resultDate);
+
   // 외부 일정
-  if (params.announcementDate) {
-    items.push({ id: generateId(), taskName: '공고',           category: 'external', endDate: params.announcementDate, status: 'planned', isMilestone: true });
+  if (announcementDate) {
+    items.push({ id: generateId(), taskName: '공고',           category: 'external', endDate: announcementDate, status: 'planned', isMilestone: true });
   }
-  if (params.registrationDate) {
-    items.push({ id: generateId(), taskName: '응모 등록 마감', category: 'external', endDate: params.registrationDate, status: 'planned', isMilestone: true });
+  if (registrationDate) {
+    items.push({ id: generateId(), taskName: '응모 등록 마감', category: 'external', endDate: registrationDate, status: 'planned', isMilestone: true });
   }
-  if (params.resultDate) {
-    items.push({ id: generateId(), taskName: '당선 발표',      category: 'external', endDate: params.resultDate,      status: 'planned', isMilestone: true });
+  if (resultDate) {
+    items.push({ id: generateId(), taskName: '당선 발표',      category: 'external', endDate: resultDate,       status: 'planned', isMilestone: true });
   }
 
   // 내부 작업 일정 (제출마감 기준 역산)
-  if (params.submissionDate) {
+  if (submissionDate) {
     items.push({
       id: generateId(),
       taskName: '작품접수',
       category: 'external',
-      endDate: params.submissionDate,
+      endDate: submissionDate,
       status: 'planned',
       isMilestone: true,
     });
 
     for (const t of DESIGN_TEMPLATE) {
-      const endDate   = addDays(params.submissionDate, -t.daysBeforeDeadline);
+      const endDate   = addDays(submissionDate, -t.daysBeforeDeadline);
       const startDate = t.startDaysBeforeDeadline
-        ? addDays(params.submissionDate, -t.startDaysBeforeDeadline)
+        ? addDays(submissionDate, -t.startDaysBeforeDeadline)
         : undefined;
       items.push({
         id: generateId(),
