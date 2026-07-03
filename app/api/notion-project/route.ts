@@ -115,7 +115,8 @@ export async function PATCH(req: NextRequest) {
   });
 
   const data = await res.json();
-  if (!res.ok) return NextResponse.json({ error: data.message || '업데이트 실패', notFound: res.status === 404 }, { status: res.status });
+  // 404(삭제됨) 또는 400(아카이브됨) 모두 새 페이지 생성이 필요한 상태로 처리
+  if (!res.ok) return NextResponse.json({ error: data.message || '업데이트 실패', notFound: true }, { status: res.status });
 
   return NextResponse.json({ ok: true });
 }
