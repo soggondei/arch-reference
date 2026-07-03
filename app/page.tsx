@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Reference, Collection, FilterState, CompetitionStatus, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR } from '@/lib/types';
+import { Reference, Collection, FilterState, CompetitionStatus, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, ScheduleItem } from '@/lib/types';
 import { COLLECTION_COLORS } from '@/lib/tags';
 import { getRefs, getCollections, deleteRef, addCollection, deleteCollection, updateRef, generateId, updateCompetitionStatus } from '@/lib/store';
 import { autoTag } from '@/lib/auto-tag';
@@ -383,6 +383,31 @@ export default function Home() {
     }
   }
 
+  async function autoSyncSchedulesToNotion(projectName: string, schedules: ScheduleItem[]): Promise<ScheduleItem[]> {
+    const results = await Promise.allSettled(
+      schedules.map(item =>
+        fetch('/api/notion-schedule', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            taskName: item.taskName,
+            projectName,
+            category: item.category,
+            status: item.status,
+            endDate: item.endDate,
+            startDate: item.startDate,
+            isMilestone: item.isMilestone,
+          }),
+        }).then(r => r.ok ? r.json() : null)
+      )
+    );
+    return schedules.map((item, i) => {
+      const r = results[i];
+      if (r.status === 'fulfilled' && r.value?.pageId) return { ...item, notionPageId: r.value.pageId as string };
+      return item;
+    });
+  }
+
   async function handleCompetitionStatusChange(id: string, status: CompetitionStatus) {
     const ref = refs.find(r => r.id === id);
     if (!ref?.competitionData) return;
@@ -402,6 +427,13 @@ export default function Home() {
         await updateCompetitionStatus(id, withSchedules);
         setRefs(prev => prev.map(x => x.id === id ? { ...x, competitionData: withSchedules } : x));
         updated = withSchedules;
+
+        // Notion 스케줄 자동 동기화 (백그라운드)
+        autoSyncSchedulesToNotion(ref.title, schedules).then(async synced => {
+          const withNotionIds = { ...updated, schedules: synced };
+          await updateCompetitionStatus(id, withNotionIds);
+          setRefs(prev => prev.map(x => x.id === id ? { ...x, competitionData: withNotionIds } : x));
+        }).catch(() => {/* silent */});
       }
     }
 

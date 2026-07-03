@@ -115,6 +115,31 @@ export default function ReferencePage() {
     setRef(r => r ? { ...r, competitionData: updated } : r);
   }
 
+  async function autoSyncSchedulesToNotion(projectName: string, schedules: ScheduleItem[]): Promise<ScheduleItem[]> {
+    const results = await Promise.allSettled(
+      schedules.map(item =>
+        fetch('/api/notion-schedule', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            taskName: item.taskName,
+            projectName,
+            category: item.category,
+            status: item.status,
+            endDate: item.endDate,
+            startDate: item.startDate,
+            isMilestone: item.isMilestone,
+          }),
+        }).then(r => r.ok ? r.json() : null)
+      )
+    );
+    return schedules.map((item, i) => {
+      const r = results[i];
+      if (r.status === 'fulfilled' && r.value?.pageId) return { ...item, notionPageId: r.value.pageId as string };
+      return item;
+    });
+  }
+
   async function handleStatusChange(status: CompetitionStatus) {
     if (!ref_?.competitionData) return;
     let updated = { ...ref_.competitionData, status };
@@ -134,6 +159,14 @@ export default function ReferencePage() {
         await updateCompetitionStatus(id, withSchedules);
         setRef(r => r ? { ...r, competitionData: withSchedules } : r);
         updated = withSchedules;
+
+        // Notion 스케줄 자동 동기화
+        setNotionSyncMsg('스케줄 Notion 동기화 중...');
+        const synced = await autoSyncSchedulesToNotion(ref_.title, schedules);
+        const withNotionIds = { ...updated, schedules: synced };
+        await updateCompetitionStatus(id, withNotionIds);
+        setRef(r => r ? { ...r, competitionData: withNotionIds } : r);
+        updated = withNotionIds;
       }
     }
 
