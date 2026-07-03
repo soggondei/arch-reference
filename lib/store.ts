@@ -81,11 +81,13 @@ export async function updateRef(updated: Reference): Promise<void> {
 }
 
 export async function updateCompetitionStatus(id: string, competitionData: CompetitionData): Promise<void> {
-  const { error } = await supabase
+  const { error, data } = await supabase
     .from('refs')
     .update({ competition_data: competitionData })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
   if (error) throw error;
+  if (!data || data.length === 0) throw new Error(`updateCompetitionStatus: 저장 실패 (id=${id})`);
 }
 
 export async function deleteRef(id: string): Promise<void> {
