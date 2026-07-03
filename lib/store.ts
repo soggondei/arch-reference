@@ -81,12 +81,26 @@ export async function updateRef(updated: Reference): Promise<void> {
 }
 
 export async function updateCompetitionStatus(id: string, competitionData: CompetitionData): Promise<void> {
-  const { error, data } = await supabase
-    .from('refs')
-    .update({ competition_data: competitionData })
-    .eq('id', id)
-    .select('id');
-  if (error) throw error;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  const res = await fetch(
+    `${url}/rest/v1/refs?id=eq.${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify({ competition_data: competitionData }),
+    }
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`updateCompetitionStatus 실패: ${res.status} ${text}`);
+  }
+  const data = await res.json() as unknown[];
   if (!data || data.length === 0) throw new Error(`updateCompetitionStatus: 저장 실패 (id=${id})`);
 }
 
