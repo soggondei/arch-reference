@@ -71,6 +71,7 @@ export default function ScheduleSection({ refId, projectName, competitionData, o
           status: next,
           endDate: item.endDate,
           startDate: item.startDate,
+          isMilestone: item.isMilestone,
         }),
       }).catch(() => {});
     }
@@ -112,6 +113,7 @@ export default function ScheduleSection({ refId, projectName, competitionData, o
               status: item.status,
               endDate: item.endDate,
               startDate: item.startDate,
+              isMilestone: item.isMilestone,
             }),
           });
           ok++;
@@ -127,6 +129,7 @@ export default function ScheduleSection({ refId, projectName, competitionData, o
               status: item.status,
               endDate: item.endDate,
               startDate: item.startDate,
+              isMilestone: item.isMilestone,
             }),
           });
           if (res.ok) {

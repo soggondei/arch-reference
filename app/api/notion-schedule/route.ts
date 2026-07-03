@@ -17,6 +17,11 @@ const STATUS_MAP: Record<ScheduleStatus, string> = {
   cancelled: '취소',
 };
 
+function colorLabel(category: ScheduleCategory, isMilestone?: boolean): string {
+  if (isMilestone) return '주요일정';
+  return CATEGORY_MAP[category];
+}
+
 function notionHeaders(token: string) {
   return {
     Authorization: `Bearer ${token}`,
@@ -32,6 +37,7 @@ function buildProperties(
   status: ScheduleStatus,
   endDate: string,
   startDate?: string,
+  isMilestone?: boolean,
 ) {
   return {
     '태스크명': { title: [{ text: { content: taskName } }] },
@@ -43,6 +49,7 @@ function buildProperties(
     },
     '상태': { select: { name: STATUS_MAP[status] } },
     '카테고리': { select: { name: CATEGORY_MAP[category] } },
+    '색상분류': { select: { name: colorLabel(category, isMilestone) } },
   };
 }
 
@@ -51,13 +58,14 @@ export async function POST(req: NextRequest) {
   const token = process.env.NOTION_TOKEN;
   if (!token) return NextResponse.json({ error: 'NOTION_TOKEN 미설정' }, { status: 500 });
 
-  const { taskName, projectName, category, status, endDate, startDate } = await req.json() as {
+  const { taskName, projectName, category, status, endDate, startDate, isMilestone } = await req.json() as {
     taskName: string;
     projectName: string;
     category: ScheduleCategory;
     status: ScheduleStatus;
     endDate: string;
     startDate?: string;
+    isMilestone?: boolean;
   };
 
   const res = await fetch('https://api.notion.com/v1/pages', {
@@ -65,7 +73,7 @@ export async function POST(req: NextRequest) {
     headers: notionHeaders(token),
     body: JSON.stringify({
       parent: { database_id: SCHEDULE_DB_ID },
-      properties: buildProperties(taskName, projectName, category, status, endDate, startDate),
+      properties: buildProperties(taskName, projectName, category, status, endDate, startDate, isMilestone),
     }),
   });
 
@@ -80,7 +88,7 @@ export async function PATCH(req: NextRequest) {
   const token = process.env.NOTION_TOKEN;
   if (!token) return NextResponse.json({ error: 'NOTION_TOKEN 미설정' }, { status: 500 });
 
-  const { notionPageId, taskName, projectName, category, status, endDate, startDate } = await req.json() as {
+  const { notionPageId, taskName, projectName, category, status, endDate, startDate, isMilestone } = await req.json() as {
     notionPageId: string;
     taskName: string;
     projectName: string;
@@ -88,13 +96,14 @@ export async function PATCH(req: NextRequest) {
     status: ScheduleStatus;
     endDate: string;
     startDate?: string;
+    isMilestone?: boolean;
   };
 
   const res = await fetch(`https://api.notion.com/v1/pages/${notionPageId}`, {
     method: 'PATCH',
     headers: notionHeaders(token),
     body: JSON.stringify({
-      properties: buildProperties(taskName, projectName, category, status, endDate, startDate),
+      properties: buildProperties(taskName, projectName, category, status, endDate, startDate, isMilestone),
     }),
   });
 
