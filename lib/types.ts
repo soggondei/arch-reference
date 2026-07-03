@@ -32,6 +32,32 @@ export interface JudgeMember {
   affiliation?: string;
 }
 
+export type ScheduleCategory = 'external' | 'design' | 'admin';
+export type ScheduleStatus = 'planned' | 'in-progress' | 'done' | 'cancelled';
+
+export const SCHEDULE_CATEGORY_LABEL: Record<ScheduleCategory, string> = {
+  external: '외부일정',
+  design: '설계작업',
+  admin: '행정',
+};
+
+export const SCHEDULE_STATUS_LABEL: Record<ScheduleStatus, string> = {
+  planned: '예정',
+  'in-progress': '진행중',
+  done: '완료',
+  cancelled: '취소',
+};
+
+export interface ScheduleItem {
+  id: string;
+  taskName: string;
+  category: ScheduleCategory;
+  startDate?: string;
+  endDate: string;
+  status: ScheduleStatus;
+  notionPageId?: string;
+}
+
 export interface CompetitionData {
   status: CompetitionStatus;
   memo?: string;
@@ -48,6 +74,7 @@ export interface CompetitionData {
   judges?: JudgeMember[];
   submissions?: string;
   notionPageId?: string;
+  schedules?: ScheduleItem[];
 }
 
 export interface Reference {

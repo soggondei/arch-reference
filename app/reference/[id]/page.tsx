@@ -2,11 +2,12 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Reference, Collection, CompetitionStatus, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, JudgeMember } from '@/lib/types';
+import { Reference, Collection, CompetitionStatus, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, JudgeMember, ScheduleItem } from '@/lib/types';
 import { getRefs, getCollections, updateRef, deleteRef, updateCompetitionStatus } from '@/lib/store';
 import { TAG_LABELS, TagCategory } from '@/lib/tags';
 import TagBadge from '@/components/TagBadge';
 import SimilarPanel from '@/components/SimilarPanel';
+import ScheduleSection from '@/components/ScheduleSection';
 import Link from 'next/link';
 
 const TAG_CATEGORIES: TagCategory[] = ['program', 'material', 'mass', 'scale', 'designItem', 'site', 'region'];
@@ -104,6 +105,13 @@ export default function ReferencePage() {
     await updateCompetitionStatus(id, updated);
     setRef(r => r ? { ...r, competitionData: updated } : r);
     setEditingCompetition(false);
+  }
+
+  async function handleScheduleUpdate(schedules: ScheduleItem[]) {
+    if (!ref_?.competitionData) return;
+    const updated = { ...ref_.competitionData, schedules };
+    await updateCompetitionStatus(id, updated);
+    setRef(r => r ? { ...r, competitionData: updated } : r);
   }
 
   async function handleStatusChange(status: CompetitionStatus) {
@@ -394,6 +402,16 @@ export default function ReferencePage() {
                   </>
                 )}
               </div>
+            )}
+
+            {/* 스케줄 */}
+            {cd && (
+              <ScheduleSection
+                refId={id}
+                projectName={ref_.title}
+                competitionData={cd}
+                onUpdate={handleScheduleUpdate}
+              />
             )}
 
             {/* 태그 (공모전이 아닌 경우 또는 공모전이어도 태그 있으면) */}
