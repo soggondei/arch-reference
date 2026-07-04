@@ -101,8 +101,8 @@ export default function ScheduleSection({ refId, projectName, competitionData, o
       const item = updatedSchedules[i];
       try {
         if (item.notionPageId) {
-          // 업데이트
-          await fetch('/api/notion-schedule', {
+          // PATCH 시도, 실패 시(아카이브/삭제) POST로 신규 생성
+          const patchRes = await fetch('/api/notion-schedule', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -116,7 +116,31 @@ export default function ScheduleSection({ refId, projectName, competitionData, o
               isMilestone: item.isMilestone,
             }),
           });
-          ok++;
+          if (patchRes.ok) {
+            ok++;
+          } else {
+            // 페이지가 삭제/아카이브된 경우 신규 생성
+            const postRes = await fetch('/api/notion-schedule', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                taskName: item.taskName,
+                projectName,
+                category: item.category,
+                status: item.status,
+                endDate: item.endDate,
+                startDate: item.startDate,
+                isMilestone: item.isMilestone,
+              }),
+            });
+            if (postRes.ok) {
+              const data = await postRes.json() as { pageId?: string };
+              if (data.pageId) updatedSchedules[i] = { ...item, notionPageId: data.pageId };
+              ok++;
+            } else {
+              fail++;
+            }
+          }
         } else {
           // 신규 생성
           const res = await fetch('/api/notion-schedule', {

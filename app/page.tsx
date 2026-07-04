@@ -385,8 +385,27 @@ export default function Home() {
 
   async function autoSyncSchedulesToNotion(projectName: string, schedules: ScheduleItem[]): Promise<ScheduleItem[]> {
     const results = await Promise.allSettled(
-      schedules.map(item =>
-        fetch('/api/notion-schedule', {
+      schedules.map(async item => {
+        // notionPageId가 있으면 PATCH 먼저 시도, 실패 시(아카이브/삭제) POST로 신규 생성
+        if (item.notionPageId) {
+          const patchRes = await fetch('/api/notion-schedule', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              notionPageId: item.notionPageId,
+              taskName: item.taskName,
+              projectName,
+              category: item.category,
+              status: item.status,
+              endDate: item.endDate,
+              startDate: item.startDate,
+              isMilestone: item.isMilestone,
+            }),
+          });
+          if (patchRes.ok) return { pageId: item.notionPageId };
+        }
+        // notionPageId 없거나 PATCH 실패 → 신규 생성
+        const postRes = await fetch('/api/notion-schedule', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -398,8 +417,9 @@ export default function Home() {
             startDate: item.startDate,
             isMilestone: item.isMilestone,
           }),
-        }).then(r => r.ok ? r.json() : null)
-      )
+        });
+        return postRes.ok ? postRes.json() : null;
+      })
     );
     return schedules.map((item, i) => {
       const r = results[i];
