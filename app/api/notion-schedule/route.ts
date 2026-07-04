@@ -108,7 +108,8 @@ export async function PATCH(req: NextRequest) {
   });
 
   const data = await res.json();
-  if (!res.ok) return NextResponse.json({ error: data.message || '업데이트 실패' }, { status: 500 });
+  if (!res.ok) return NextResponse.json({ error: data.message || '업데이트 실패', notFound: true }, { status: res.status });
+  if (data.in_trash || data.archived) return NextResponse.json({ error: 'page_trashed', notFound: true }, { status: 400 });
 
   return NextResponse.json({ ok: true });
 }
