@@ -384,8 +384,10 @@ export default function Home() {
   }
 
   async function autoSyncSchedulesToNotion(projectName: string, schedules: ScheduleItem[]): Promise<ScheduleItem[]> {
+    console.log('[autoSyncSchedulesToNotion] 진입 schedules.length:', schedules.length);
     const results = await Promise.allSettled(
       schedules.map(async item => {
+        console.log('[autoSyncSchedulesToNotion] item:', item.taskName, 'notionPageId:', item.notionPageId);
         // notionPageId가 있으면 PATCH 먼저 시도, 실패 시(아카이브/삭제) POST로 신규 생성
         if (item.notionPageId) {
           const patchRes = await fetch('/api/notion-schedule', {
@@ -498,13 +500,16 @@ export default function Home() {
     setRefs(prev => prev.map(r => r.id === id ? { ...r, competitionData: cd } : r));
 
     // 4. Notion 스케줄 동기화 (백그라운드 - cd 캡처해서 stale closure 방지)
+    console.log('[AutoSync] cd.schedules:', cd.schedules?.length, cd.schedules);
     if (cd.schedules && cd.schedules.length > 0) {
       const snapshot = cd;
+      console.log('[AutoSync] 시작 - schedules:', snapshot.schedules!.length);
       autoSyncSchedulesToNotion(ref.title, snapshot.schedules!).then(async synced => {
+        console.log('[AutoSync] 완료 - synced:', synced.length);
         const withSynced = { ...snapshot, schedules: synced };
         await updateCompetitionStatus(id, withSynced);
         setRefs(prev => prev.map(x => x.id === id ? { ...x, competitionData: withSynced } : x));
-      }).catch(() => {/* silent */});
+      }).catch((err) => { console.error('[AutoSync] 오류:', err); });
     }
   }
 
