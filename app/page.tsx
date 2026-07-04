@@ -411,46 +411,32 @@ export default function Home() {
   async function handleCompetitionStatusChange(id: string, status: CompetitionStatus) {
     const ref = refs.find(r => r.id === id);
     if (!ref?.competitionData) return;
-    let updated = { ...ref.competitionData, status };
-    await updateCompetitionStatus(id, updated);
-    setRefs(prev => prev.map(r => r.id === id ? { ...r, competitionData: updated } : r));
 
-    if (status === '등록완료' && (!updated.schedules || updated.schedules.length === 0)) {
+    // 1. 스케줄 생성 (동기 - DB 저장 전)
+    let cd: CompetitionData = { ...ref.competitionData, status };
+    if (status === '등록완료' && (!cd.schedules || cd.schedules.length === 0)) {
       const schedules = generateScheduleTemplate({
-        submissionDate: updated.submissionDate,
-        registrationDate: updated.registrationDate,
-        announcementDate: updated.announcementDate,
-        resultDate: updated.resultDate,
+        submissionDate: cd.submissionDate,
+        registrationDate: cd.registrationDate,
+        announcementDate: cd.announcementDate,
+        resultDate: cd.resultDate,
       });
-      if (schedules.length > 0) {
-        const withSchedules = { ...updated, schedules };
-        await updateCompetitionStatus(id, withSchedules);
-        setRefs(prev => prev.map(x => x.id === id ? { ...x, competitionData: withSchedules } : x));
-        updated = withSchedules;
-
-        // Notion 스케줄 자동 동기화 (백그라운드)
-        autoSyncSchedulesToNotion(ref.title, schedules).then(async synced => {
-          const withNotionIds = { ...updated, schedules: synced };
-          await updateCompetitionStatus(id, withNotionIds);
-          setRefs(prev => prev.map(x => x.id === id ? { ...x, competitionData: withNotionIds } : x));
-        }).catch(() => {/* silent */});
-      }
+      if (schedules.length > 0) cd = { ...cd, schedules };
     }
 
+    // 2. Notion 프로젝트 생성/업데이트 (await - notionPageId 확보 후 저장)
     if (status === '등록예정' || status === '등록완료') {
-      const cd = updated;
-      if (cd.notionPageId) {
-        // 기존 Notion 페이지 상태 업데이트
-        fetch('/api/notion-project', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ notionPageId: cd.notionPageId, status }),
-        }).then(async r => {
+      try {
+        if (cd.notionPageId) {
+          const r = await fetch('/api/notion-project', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notionPageId: cd.notionPageId, status }),
+          });
           if (!r.ok) {
             const err = await r.json() as { notFound?: boolean };
             if (err.notFound) {
-              // 페이지가 삭제된 경우 새로 생성
-              const res = await fetch('/api/notion-project', {
+              const r2 = await fetch('/api/notion-project', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -461,40 +447,44 @@ export default function Home() {
                   floorArea: cd.floorArea, sourceUrl: ref.sourceUrl, submissions: cd.submissions,
                 }),
               });
-              if (res.ok) {
-                const data = await res.json() as { pageId?: string };
-                if (data.pageId) {
-                  const withId = { ...updated, notionPageId: data.pageId };
-                  await updateCompetitionStatus(id, withId);
-                  setRefs(prev => prev.map(x => x.id === id ? { ...x, competitionData: withId } : x));
-                }
+              if (r2.ok) {
+                const data = await r2.json() as { pageId?: string };
+                if (data.pageId) cd = { ...cd, notionPageId: data.pageId };
               }
             }
           }
-        }).catch(() => {/* silent */});
-      } else {
-        // 신규 Notion 페이지 생성
-        fetch('/api/notion-project', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: ref.title, architect: ref.architect,
-            location: cd.location, submissionDate: cd.submissionDate,
-            registrationDate: cd.registrationDate, announcementDate: cd.announcementDate,
-            resultDate: cd.resultDate, designFee: cd.designFee,
-            floorArea: cd.floorArea, sourceUrl: ref.sourceUrl, submissions: cd.submissions,
-          }),
-        }).then(async r => {
+        } else {
+          const r = await fetch('/api/notion-project', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: ref.title, architect: ref.architect,
+              location: cd.location, submissionDate: cd.submissionDate,
+              registrationDate: cd.registrationDate, announcementDate: cd.announcementDate,
+              resultDate: cd.resultDate, designFee: cd.designFee,
+              floorArea: cd.floorArea, sourceUrl: ref.sourceUrl, submissions: cd.submissions,
+            }),
+          });
           if (r.ok) {
-            const data = await r.json() as { url?: string; pageId?: string };
-            if (data.pageId) {
-              const withId = { ...updated, notionPageId: data.pageId };
-              await updateCompetitionStatus(id, withId);
-              setRefs(prev => prev.map(x => x.id === id ? { ...x, competitionData: withId } : x));
-            }
+            const data = await r.json() as { pageId?: string };
+            if (data.pageId) cd = { ...cd, notionPageId: data.pageId };
           }
-        }).catch(() => {/* silent */});
-      }
+        }
+      } catch { /* silent */ }
+    }
+
+    // 3. 스케줄 + notionPageId 모두 포함해서 한 번에 저장
+    await updateCompetitionStatus(id, cd);
+    setRefs(prev => prev.map(r => r.id === id ? { ...r, competitionData: cd } : r));
+
+    // 4. Notion 스케줄 동기화 (백그라운드 - cd 캡처해서 stale closure 방지)
+    if (cd.schedules && cd.schedules.length > 0) {
+      const snapshot = cd;
+      autoSyncSchedulesToNotion(ref.title, snapshot.schedules!).then(async synced => {
+        const withSynced = { ...snapshot, schedules: synced };
+        await updateCompetitionStatus(id, withSynced);
+        setRefs(prev => prev.map(x => x.id === id ? { ...x, competitionData: withSynced } : x));
+      }).catch(() => {/* silent */});
     }
   }
 
