@@ -52,6 +52,31 @@ function DDayLabel({ label, dday }: { label: string; dday: number | null }) {
   );
 }
 
+function SearchInput({
+  value,
+  onChange,
+  autoFocus,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  autoFocus?: boolean;
+}) {
+  return (
+    <div className="relative">
+      <input
+        autoFocus={autoFocus}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder="제목, 건축가, 태그 검색..."
+        className="w-full pl-9 pr-3 py-1.5 bg-zinc-100 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-zinc-300"
+      />
+      <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+    </div>
+  );
+}
+
 function CompetitionRow({
   ref_,
   onStatusChange,
@@ -322,6 +347,7 @@ export default function Home() {
   const [prefill, setPrefill] = useState<Record<string, string> | null>(null);
   const [tab, setTab] = useState<'refs' | 'competitions'>('refs');
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const syncingIds = useRef<Set<string>>(new Set());
 
   const load = useCallback(async () => {
@@ -572,17 +598,20 @@ export default function Home() {
           </button>
 
           {tab === 'refs' && (
-            <div className="flex-1 relative max-w-md">
-              <input
-                value={filters.search}
-                onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
-                placeholder="제목, 건축가, 태그 검색..."
-                className="w-full pl-9 pr-3 py-1.5 bg-zinc-100 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-zinc-300"
-              />
-              <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <div className="hidden md:block flex-1 max-w-md">
+              <SearchInput value={filters.search} onChange={v => setFilters(f => ({ ...f, search: v }))} />
+            </div>
+          )}
+          {tab === 'refs' && (
+            <button
+              onClick={() => setMobileSearchOpen(v => !v)}
+              className="md:hidden p-2 text-zinc-400 hover:text-zinc-700 shrink-0"
+              aria-label="검색"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
-            </div>
+            </button>
           )}
 
           <div className="ml-auto flex items-center gap-2 shrink-0">
@@ -599,17 +628,23 @@ export default function Home() {
           </div>
         </div>
 
+        {tab === 'refs' && mobileSearchOpen && (
+          <div className="md:hidden px-6 pb-3">
+            <SearchInput value={filters.search} onChange={v => setFilters(f => ({ ...f, search: v }))} autoFocus />
+          </div>
+        )}
+
         {/* 탭 */}
-        <div className="max-w-screen-xl mx-auto px-6 flex gap-0 border-t border-zinc-100">
+        <div className="max-w-screen-xl mx-auto px-6 flex gap-0 border-t border-zinc-100 overflow-x-auto scrollbar-hide">
           <button
             onClick={() => setTab('refs')}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${tab === 'refs' ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-400 hover:text-zinc-700'}`}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${tab === 'refs' ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-400 hover:text-zinc-700'}`}
           >
             레퍼런스 {regularRefs.length > 0 && <span className="ml-1 text-xs text-zinc-400">{regularRefs.length}</span>}
           </button>
           <button
             onClick={() => setTab('competitions')}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${tab === 'competitions' ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-400 hover:text-zinc-700'}`}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${tab === 'competitions' ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-400 hover:text-zinc-700'}`}
           >
             공모전 {competitionRefs.length > 0 && <span className="ml-1 text-xs text-zinc-400">{competitionRefs.length}</span>}
           </button>
