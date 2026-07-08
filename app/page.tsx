@@ -9,6 +9,7 @@ import { autoTag } from '@/lib/auto-tag';
 import { generateScheduleTemplate } from '@/lib/schedule-template';
 import ReferenceCard from '@/components/ReferenceCard';
 import FilterPanel from '@/components/FilterPanel';
+import FilterSheet from '@/components/FilterSheet';
 import UploadForm from '@/components/UploadForm';
 import Link from 'next/link';
 
@@ -320,6 +321,7 @@ export default function Home() {
   const [showUpload, setShowUpload] = useState(false);
   const [prefill, setPrefill] = useState<Record<string, string> | null>(null);
   const [tab, setTab] = useState<'refs' | 'competitions'>('refs');
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const syncingIds = useRef<Set<string>>(new Set());
 
   const load = useCallback(async () => {
@@ -548,6 +550,11 @@ export default function Home() {
     return true;
   });
 
+  const activeFilterCount =
+    filters.program.length + filters.material.length + filters.mass.length + filters.scale.length +
+    filters.designItem.length + filters.site.length + filters.region.length + filters.refType.length +
+    (filters.collectionId ? 1 : 0);
+
   return (
     <div className="min-h-screen bg-zinc-50">
       <Suspense>
@@ -612,16 +619,32 @@ export default function Home() {
       <div className="max-w-screen-xl mx-auto px-6 py-6 flex gap-8">
         {tab === 'refs' ? (
           <>
-            <FilterPanel
-              filters={filters}
-              onFilterChange={setFilters}
-              collections={collections}
-              totalCount={regularRefs.length}
-              filteredCount={filtered.length}
-              onCreateCollection={handleCreateCollection}
-              onDeleteCollection={handleDeleteCollection}
-            />
+            <div className="hidden md:flex">
+              <FilterPanel
+                filters={filters}
+                onFilterChange={setFilters}
+                collections={collections}
+                totalCount={regularRefs.length}
+                filteredCount={filtered.length}
+                onCreateCollection={handleCreateCollection}
+                onDeleteCollection={handleDeleteCollection}
+              />
+            </div>
             <main className="flex-1 min-w-0">
+              <button
+                onClick={() => setFilterSheetOpen(true)}
+                className="md:hidden mb-4 flex items-center gap-2 border border-zinc-200 rounded-lg px-3 py-2 text-sm text-zinc-600 bg-white"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="4" y1="6" x2="20" y2="6" /><line x1="7" y1="12" x2="17" y2="12" /><line x1="10" y1="18" x2="14" y2="18" />
+                </svg>
+                필터
+                {activeFilterCount > 0 && (
+                  <span className="bg-zinc-900 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
               {filtered.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-24 text-center">
                   {regularRefs.length === 0 ? (
@@ -659,6 +682,17 @@ export default function Home() {
                 </div>
               )}
             </main>
+            <FilterSheet
+              open={filterSheetOpen}
+              onClose={() => setFilterSheetOpen(false)}
+              filters={filters}
+              onFilterChange={setFilters}
+              collections={collections}
+              totalCount={regularRefs.length}
+              filteredCount={filtered.length}
+              onCreateCollection={handleCreateCollection}
+              onDeleteCollection={handleDeleteCollection}
+            />
           </>
         ) : (
           <CompetitionView
