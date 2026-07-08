@@ -740,8 +740,8 @@ export default function Home() {
       </div>
 
       {showUpload && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center overflow-y-auto py-8">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 p-6">
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center md:overflow-y-auto md:py-8">
+          <div className="bg-white w-full h-full overflow-y-auto p-6 md:h-auto md:overflow-visible md:rounded-2xl md:shadow-2xl md:max-w-2xl md:mx-4">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-bold text-zinc-900">레퍼런스 추가</h2>
               <button onClick={() => setShowUpload(false)} className="text-zinc-400 hover:text-zinc-700 text-2xl leading-none">×</button>
