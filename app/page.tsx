@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Reference, Collection, FilterState, CompetitionStatus, CompetitionData, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, ScheduleItem } from '@/lib/types';
 import { COLLECTION_COLORS } from '@/lib/tags';
@@ -320,6 +320,7 @@ export default function Home() {
   const [showUpload, setShowUpload] = useState(false);
   const [prefill, setPrefill] = useState<Record<string, string> | null>(null);
   const [tab, setTab] = useState<'refs' | 'competitions'>('refs');
+  const syncingIds = useRef<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     const [r, c] = await Promise.all([getRefs(), getCollections()]);
@@ -336,7 +337,20 @@ export default function Home() {
 
   async function handleDelete(id: string) {
     if (!confirm('이 레퍼런스를 삭제하시겠습니까?')) return;
+    const ref = refs.find(r => r.id === id);
     await deleteRef(id);
+    // Notion 스케줄 페이지 아카이브 (백그라운드)
+    if (ref?.competitionData?.schedules) {
+      ref.competitionData.schedules
+        .filter(s => s.notionPageId)
+        .forEach(s => {
+          fetch('/api/notion-schedule', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notionPageId: s.notionPageId }),
+          }).catch(() => {});
+        });
+    }
     void load();
   }
 
@@ -429,8 +443,10 @@ export default function Home() {
   }
 
   async function handleCompetitionStatusChange(id: string, status: CompetitionStatus) {
+    if (syncingIds.current.has(id)) return;
     const ref = refs.find(r => r.id === id);
     if (!ref?.competitionData) return;
+    syncingIds.current.add(id);
 
     // 1. 스케줄 생성 (동기 - DB 저장 전)
     let cd: CompetitionData = { ...ref.competitionData, status };
@@ -504,7 +520,9 @@ export default function Home() {
         const withSynced = { ...snapshot, schedules: synced };
         await updateCompetitionStatus(id, withSynced);
         setRefs(prev => prev.map(x => x.id === id ? { ...x, competitionData: withSynced } : x));
-      }).catch(() => {/* silent */});
+      }).catch(() => {/* silent */}).finally(() => { syncingIds.current.delete(id); });
+    } else {
+      syncingIds.current.delete(id);
     }
   }
 

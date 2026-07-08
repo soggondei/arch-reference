@@ -17,11 +17,6 @@ const STATUS_MAP: Record<ScheduleStatus, string> = {
   cancelled: '취소',
 };
 
-function colorLabel(category: ScheduleCategory, isMilestone?: boolean): string {
-  if (isMilestone) return '주요일정';
-  return CATEGORY_MAP[category];
-}
-
 function notionHeaders(token: string) {
   return {
     Authorization: `Bearer ${token}`,
@@ -37,7 +32,6 @@ function buildProperties(
   status: ScheduleStatus,
   endDate: string,
   startDate?: string,
-  isMilestone?: boolean,
 ) {
   return {
     '태스크명': { title: [{ text: { content: taskName } }] },
@@ -49,7 +43,7 @@ function buildProperties(
     },
     '상태': { select: { name: STATUS_MAP[status] } },
     '카테고리': { select: { name: CATEGORY_MAP[category] } },
-    '색상분류': { select: { name: colorLabel(category, isMilestone) } },
+    '색상분류': { select: { name: CATEGORY_MAP[category] } },
   };
 }
 
@@ -73,7 +67,7 @@ export async function POST(req: NextRequest) {
     headers: notionHeaders(token),
     body: JSON.stringify({
       parent: { database_id: SCHEDULE_DB_ID },
-      properties: buildProperties(taskName, projectName, category, status, endDate, startDate, isMilestone),
+      properties: buildProperties(taskName, projectName, category, status, endDate, startDate),
     }),
   });
 
@@ -103,7 +97,7 @@ export async function PATCH(req: NextRequest) {
     method: 'PATCH',
     headers: notionHeaders(token),
     body: JSON.stringify({
-      properties: buildProperties(taskName, projectName, category, status, endDate, startDate, isMilestone),
+      properties: buildProperties(taskName, projectName, category, status, endDate, startDate),
     }),
   });
 
