@@ -5,7 +5,7 @@ import { FilterState, Collection, RefType, REF_TYPE_LABEL, REF_TYPE_COLOR } from
 import { TAGS, TAG_LABELS, TagCategory } from '@/lib/tags';
 import TagBadge from './TagBadge';
 
-interface FilterPanelProps {
+export interface FilterPanelProps {
   filters: FilterState;
   onFilterChange: (filters: FilterState) => void;
   collections: Collection[];
@@ -13,11 +13,12 @@ interface FilterPanelProps {
   filteredCount: number;
   onCreateCollection?: (name: string) => void;
   onDeleteCollection?: (id: string) => void;
+  variant?: 'sidebar' | 'sheet';
 }
 
 const MULTI_CATEGORIES: TagCategory[] = ['program', 'material', 'mass', 'scale', 'designItem', 'site', 'region'];
 
-export default function FilterPanel({ filters, onFilterChange, collections, totalCount, filteredCount, onCreateCollection, onDeleteCollection }: FilterPanelProps) {
+export default function FilterPanel({ filters, onFilterChange, collections, totalCount, filteredCount, onCreateCollection, onDeleteCollection, variant = 'sidebar' }: FilterPanelProps) {
   const [showNewCol, setShowNewCol] = useState(false);
   const [newColName, setNewColName] = useState('');
 
@@ -48,7 +49,7 @@ export default function FilterPanel({ filters, onFilterChange, collections, tota
   const hasFilter = MULTI_CATEGORIES.some(c => filters[c].length > 0) || filters.collectionId || filters.refType.length > 0;
 
   return (
-    <aside className="w-56 shrink-0 flex flex-col gap-5">
+    <aside className={variant === 'sidebar' ? 'w-56 shrink-0 flex flex-col gap-5' : 'flex flex-col gap-5'}>
       <div className="flex items-center justify-between">
         <span className="text-xs text-zinc-400">
           {filteredCount} / {totalCount}개
