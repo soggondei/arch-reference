@@ -195,29 +195,49 @@ function SearchInput({
   );
 }
 
-function IOSInstallHint() {
-  const [show, setShow] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+function MobileMoreMenu() {
+  const [open, setOpen] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const isIOS = /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+    const ios = /iphone|ipad|ipod/i.test(window.navigator.userAgent);
     const isStandalone = (window.navigator as unknown as { standalone?: boolean }).standalone === true;
-    setShow(isIOS && !isStandalone);
+    setIsIOS(ios && !isStandalone);
   }, []);
 
-  if (!show) return null;
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
 
   return (
-    <div className="relative">
+    <div className="relative md:hidden" ref={menuRef}>
       <button
-        onClick={() => setExpanded(v => !v)}
-        className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors"
+        onClick={() => setOpen(v => !v)}
+        className="p-2 text-zinc-400 hover:text-zinc-700"
+        aria-label="더보기"
       >
-        앱 설치
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
+        </svg>
       </button>
-      {expanded && (
-        <div className="absolute right-0 top-8 z-50 bg-white rounded-xl shadow-lg border border-zinc-100 p-3 w-56 text-xs text-zinc-600 leading-relaxed">
-          Safari 하단 공유 버튼을 누른 뒤 &quot;홈 화면에 추가&quot;를 선택하세요.
+      {open && (
+        <div className="absolute right-0 top-8 z-50 bg-white rounded-xl shadow-lg border border-zinc-100 py-1 min-w-[160px]">
+          <Link href="/seoul-import" className="block px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50" onClick={() => setOpen(false)}>서울시 공모전</Link>
+          <Link href="/scorer-import" className="block px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50" onClick={() => setOpen(false)}>스코어러</Link>
+          <Link href="/bookmarklet" className="block px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50" onClick={() => setOpen(false)}>북마클릿</Link>
+          {isIOS && (
+            <div className="border-t border-zinc-100 mt-1 pt-2 px-3 pb-2 text-xs text-zinc-500 leading-relaxed">
+              Safari 하단 공유 버튼을 누른 뒤 &quot;홈 화면에 추가&quot;를 선택하세요.
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -760,10 +780,10 @@ export default function Home() {
           )}
 
           <div className="ml-auto flex items-center gap-2 shrink-0">
-            <IOSInstallHint />
-            <Link href="/seoul-import" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden sm:block">서울시 공모전</Link>
-            <Link href="/scorer-import" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden sm:block">스코어러</Link>
-            <Link href="/bookmarklet" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden sm:block">북마클릿</Link>
+            <MobileMoreMenu />
+            <Link href="/seoul-import" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden md:block">서울시 공모전</Link>
+            <Link href="/scorer-import" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden md:block">스코어러</Link>
+            <Link href="/bookmarklet" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden md:block">북마클릿</Link>
             <button
               onClick={() => setShowUpload(true)}
               className="flex items-center gap-2 bg-zinc-900 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-zinc-700 transition-colors"
