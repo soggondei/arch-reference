@@ -77,6 +77,35 @@ function SearchInput({
   );
 }
 
+function IOSInstallHint() {
+  const [show, setShow] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    const isIOS = /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+    const isStandalone = (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+    setShow(isIOS && !isStandalone);
+  }, []);
+
+  if (!show) return null;
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors"
+      >
+        앱 설치
+      </button>
+      {expanded && (
+        <div className="absolute right-0 top-8 z-50 bg-white rounded-xl shadow-lg border border-zinc-100 p-3 w-56 text-xs text-zinc-600 leading-relaxed">
+          Safari 하단 공유 버튼을 누른 뒤 &quot;홈 화면에 추가&quot;를 선택하세요.
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CompetitionRow({
   ref_,
   onStatusChange,
@@ -615,6 +644,7 @@ export default function Home() {
           )}
 
           <div className="ml-auto flex items-center gap-2 shrink-0">
+            <IOSInstallHint />
             <Link href="/seoul-import" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden sm:block">서울시 공모전</Link>
             <Link href="/scorer-import" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden sm:block">스코어러</Link>
             <Link href="/bookmarklet" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden sm:block">북마클릿</Link>
