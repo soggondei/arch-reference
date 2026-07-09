@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Reference, Collection, FilterState, CompetitionStatus, CompetitionData, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, ScheduleItem } from '@/lib/types';
 import { COLLECTION_COLORS } from '@/lib/tags';
-import { getRefs, getCollections, deleteRef, addCollection, deleteCollection, updateRef, generateId, updateCompetitionStatus } from '@/lib/store';
+import { getRefs, getCollections, deleteRef, addCollection, deleteCollection, updateRef, generateId, updateCompetitionStatus, archiveRefNotionSchedules } from '@/lib/store';
 import { autoTag } from '@/lib/auto-tag';
 import { generateScheduleTemplate } from '@/lib/schedule-template';
 import ReferenceCard from '@/components/ReferenceCard';
@@ -396,18 +396,7 @@ export default function Home() {
     if (!confirm('이 레퍼런스를 삭제하시겠습니까?')) return;
     const ref = refs.find(r => r.id === id);
     await deleteRef(id);
-    // Notion 스케줄 페이지 아카이브 (백그라운드)
-    if (ref?.competitionData?.schedules) {
-      ref.competitionData.schedules
-        .filter(s => s.notionPageId)
-        .forEach(s => {
-          fetch('/api/notion-schedule', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ notionPageId: s.notionPageId }),
-          }).catch(() => {});
-        });
-    }
+    archiveRefNotionSchedules(ref);
     void load();
   }
 

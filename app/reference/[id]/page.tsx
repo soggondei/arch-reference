@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Reference, Collection, CompetitionStatus, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, JudgeMember, ScheduleItem } from '@/lib/types';
-import { getRefs, getCollections, updateRef, deleteRef, updateCompetitionStatus } from '@/lib/store';
+import { getRefs, getCollections, updateRef, deleteRef, updateCompetitionStatus, archiveRefNotionSchedules } from '@/lib/store';
 import { generateScheduleTemplate } from '@/lib/schedule-template';
 import { TAG_LABELS, TagCategory } from '@/lib/tags';
 import TagBadge from '@/components/TagBadge';
@@ -67,18 +67,7 @@ export default function ReferencePage() {
   async function handleDelete() {
     if (!confirm('이 레퍼런스를 삭제하시겠습니까?')) return;
     await deleteRef(id);
-    // Notion 스케줄 페이지 아카이브 (백그라운드)
-    if (ref_?.competitionData?.schedules) {
-      ref_.competitionData.schedules
-        .filter(s => s.notionPageId)
-        .forEach(s => {
-          fetch('/api/notion-schedule', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ notionPageId: s.notionPageId }),
-          }).catch(() => {});
-        });
-    }
+    archiveRefNotionSchedules(ref_);
     router.push('/');
   }
 
