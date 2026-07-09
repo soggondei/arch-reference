@@ -359,7 +359,7 @@ export default function ReferencePage() {
                 </div>
                 {editingCompetition ? (
                   <div className="px-4 pb-4 pt-2 flex flex-col gap-3">
-                    <div className="grid grid-cols-2 gap-x-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
                       {[
                         { key: 'announcementDate', label: '공고일', placeholder: '2026-01-01' },
                         { key: 'floorAreaText', label: '연면적', placeholder: '3,600㎡' },
@@ -405,8 +405,8 @@ export default function ReferencePage() {
                   </div>
                 ) : (
                   <>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-0">
-                      <div className="px-4 py-2 border-r border-zinc-100 flex flex-col gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0">
+                      <div className="px-4 py-2 border-r-0 sm:border-r border-zinc-100 flex flex-col gap-2">
                         <InfoRow label="공고일"   value={cd.announcementDate} />
                         <InfoRow label="참가등록" value={cd.registrationDate} />
                         <InfoRow label="작품접수" value={cd.submissionDate} />
@@ -438,7 +438,7 @@ export default function ReferencePage() {
                     {cd.judges && cd.judges.length > 0 && (
                       <div className="px-4 py-3 border-t border-zinc-100">
                         <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">심사위원</p>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
                           {cd.judges.map((j, i) => (
                             <div key={i} className="text-xs leading-snug">
                               <span className="font-medium text-zinc-700">{j.name}</span>

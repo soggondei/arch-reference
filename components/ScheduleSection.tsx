@@ -255,13 +255,13 @@ export default function ScheduleSection({ refId, projectName, competitionData, o
       {/* 항목 추가 폼 */}
       {showAddForm && (
         <div className="px-4 py-3 border-t border-zinc-100 bg-zinc-50/50 flex flex-col gap-2">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <input
               type="text"
               placeholder="태스크명"
               value={addForm.taskName}
               onChange={e => setAddForm(f => ({ ...f, taskName: e.target.value }))}
-              className="border border-zinc-200 rounded-lg px-2.5 py-1.5 text-sm col-span-2 focus:outline-none focus:border-zinc-400"
+              className="border border-zinc-200 rounded-lg px-2.5 py-1.5 text-sm col-span-1 sm:col-span-2 focus:outline-none focus:border-zinc-400"
             />
             <div className="flex flex-col gap-1">
               <label className="text-[10px] text-zinc-400">시작일 (선택)</label>
