@@ -67,6 +67,18 @@ export default function ReferencePage() {
   async function handleDelete() {
     if (!confirm('이 레퍼런스를 삭제하시겠습니까?')) return;
     await deleteRef(id);
+    // Notion 스케줄 페이지 아카이브 (백그라운드)
+    if (ref_?.competitionData?.schedules) {
+      ref_.competitionData.schedules
+        .filter(s => s.notionPageId)
+        .forEach(s => {
+          fetch('/api/notion-schedule', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notionPageId: s.notionPageId }),
+          }).catch(() => {});
+        });
+    }
     router.push('/');
   }
 

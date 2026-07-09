@@ -196,21 +196,21 @@ export default function ScheduleSection({ refId, projectName, competitionData, o
   return (
     <div className="border border-zinc-100 rounded-xl overflow-hidden mt-4">
       {/* 헤더 */}
-      <div className="flex items-center justify-between px-4 pt-3 pb-2 bg-zinc-50">
-        <div className="flex items-center gap-2">
-          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">스케줄</p>
+      <div className="flex flex-wrap items-center justify-between gap-y-1 px-4 pt-3 pb-2 bg-zinc-50">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider whitespace-nowrap">스케줄</p>
           {schedules.length > 0 && (
-            <span className="text-[10px] text-zinc-400">
+            <span className="text-[10px] text-zinc-400 whitespace-nowrap">
               {schedules.length}개 {syncedCount > 0 && `· Notion ${syncedCount}개 동기화됨`}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           {schedules.length > 0 && (
             <button
               onClick={() => void handleNotionSync()}
               disabled={syncing}
-              className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800 disabled:opacity-50 font-medium"
+              className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800 disabled:opacity-50 font-medium whitespace-nowrap"
             >
               {syncing ? (
                 <span className="w-3 h-3 border border-purple-400 border-t-purple-700 rounded-full animate-spin" />
@@ -224,21 +224,21 @@ export default function ScheduleSection({ refId, projectName, competitionData, o
           )}
           <button
             onClick={() => setShowAddForm(v => !v)}
-            className="text-xs text-zinc-400 hover:text-zinc-700"
+            className="text-xs text-zinc-400 hover:text-zinc-700 whitespace-nowrap"
           >
             + 항목 추가
           </button>
           {!hasSubmission ? null : schedules.length === 0 ? (
             <button
               onClick={() => void handleGenerateTemplate()}
-              className="text-xs bg-zinc-900 text-white px-2.5 py-1 rounded-lg hover:bg-zinc-700"
+              className="text-xs bg-zinc-900 text-white px-2.5 py-1 rounded-lg hover:bg-zinc-700 whitespace-nowrap"
             >
               템플릿 생성
             </button>
           ) : (
             <button
               onClick={() => void handleGenerateTemplate()}
-              className="text-xs text-zinc-400 hover:text-zinc-600 underline"
+              className="text-xs text-zinc-400 hover:text-zinc-600 underline whitespace-nowrap"
             >
               재생성
             </button>
