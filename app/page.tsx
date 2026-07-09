@@ -13,6 +13,124 @@ import FilterSheet from '@/components/FilterSheet';
 import UploadForm from '@/components/UploadForm';
 import Link from 'next/link';
 
+// ── 입찰정보 ────────────────────────────────────────────────────────────────
+interface BidItem {
+  id: string; 공고명: string; 공고기관: string; 공고번호: string;
+  지역: string; 상태: string; 입찰방법: string; 예가방법: string;
+  배정예산: number | null; 추천입찰가: number | null; 낙찰하한가: number | null;
+  적용낙찰률: string; 실제낙찰금액: number | null; 실제낙찰률: number | null;
+  낙찰업체: string; 공고일: string; 마감일: string; 개찰일: string; 공고URL: string;
+}
+
+function fmtWon(n: number | null): string {
+  if (!n) return '-';
+  if (n >= 100000000) return `${(n / 100000000).toFixed(1)}억`;
+  if (n >= 10000) return `${Math.round(n / 10000).toLocaleString()}만`;
+  return n.toLocaleString();
+}
+
+const BID_STATUS_COLOR: Record<string, string> = {
+  '공고중': '#3b82f6', '낙찰': '#22c55e', '유찰': '#94a3b8',
+};
+
+function BidsView({ bids, loaded, statusFilter, onStatusFilter }: {
+  bids: BidItem[]; loaded: boolean; statusFilter: string; onStatusFilter: (s: string) => void;
+}) {
+  const statuses = ['공고중', '낙찰', '유찰'];
+  const counts = Object.fromEntries(statuses.map(s => [s, bids.filter(b => b.상태 === s).length]));
+  const filtered = bids.filter(b => b.상태 === statusFilter);
+
+  if (!loaded) {
+    return <div className="flex-1 flex items-center justify-center py-24 text-zinc-400 text-sm">입찰정보 불러오는 중…</div>;
+  }
+
+  return (
+    <div className="flex-1 min-w-0">
+      {/* 상태 필터 */}
+      <div className="flex gap-2 mb-5">
+        {statuses.map(s => (
+          <button
+            key={s}
+            onClick={() => onStatusFilter(s)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${statusFilter === s ? 'text-white shadow-sm' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}
+            style={statusFilter === s ? { backgroundColor: BID_STATUS_COLOR[s] } : {}}
+          >
+            {s}
+            <span className={`text-[10px] font-normal ${statusFilter === s ? 'text-white/80' : 'text-zinc-400'}`}>{counts[s]}</span>
+          </button>
+        ))}
+        <span className="ml-auto text-xs text-zinc-400 self-center">총 {bids.length}건</span>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="text-center py-16 text-zinc-400 text-sm">해당 상태의 입찰 건이 없습니다</div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {filtered.map(bid => (
+            <div key={bid.id} className="bg-white border border-zinc-100 hover:border-zinc-200 hover:shadow-sm transition-all rounded-xl px-5 py-4">
+              <div className="flex items-start gap-3">
+                {/* 상태 뱃지 */}
+                <span className="shrink-0 mt-0.5 text-[10px] font-bold text-white px-2 py-0.5 rounded-full" style={{ backgroundColor: BID_STATUS_COLOR[bid.상태] ?? '#94a3b8' }}>
+                  {bid.상태}
+                </span>
+                {/* 공고명 */}
+                <div className="flex-1 min-w-0">
+                  {bid.공고URL ? (
+                    <a href={bid.공고URL} target="_blank" rel="noreferrer" className="text-sm font-semibold text-zinc-900 hover:text-blue-600 transition-colors line-clamp-2">
+                      {bid.공고명}
+                    </a>
+                  ) : (
+                    <p className="text-sm font-semibold text-zinc-900 line-clamp-2">{bid.공고명}</p>
+                  )}
+                  <p className="text-xs text-zinc-500 mt-0.5">{bid.공고기관}{bid.지역 && ` · ${bid.지역}`}</p>
+                </div>
+              </div>
+
+              {/* 금액 정보 */}
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
+                <div>
+                  <span className="text-zinc-400">배정예산 </span>
+                  <span className="font-semibold text-zinc-800">{fmtWon(bid.배정예산)}</span>
+                </div>
+                {bid.추천입찰가 && (
+                  <div>
+                    <span className="text-zinc-400">추천입찰가 </span>
+                    <span className="font-semibold text-blue-600">{fmtWon(bid.추천입찰가)}</span>
+                    {bid.적용낙찰률 && <span className="text-zinc-400 ml-1">({bid.적용낙찰률})</span>}
+                  </div>
+                )}
+                {bid.실제낙찰금액 && (
+                  <div>
+                    <span className="text-zinc-400">낙찰금액 </span>
+                    <span className="font-semibold text-green-600">{fmtWon(bid.실제낙찰금액)}</span>
+                    {bid.실제낙찰률 && <span className="text-zinc-400 ml-1">({bid.실제낙찰률.toFixed(2)}%)</span>}
+                  </div>
+                )}
+                {bid.낙찰업체 && (
+                  <div>
+                    <span className="text-zinc-400">낙찰업체 </span>
+                    <span className="font-medium text-zinc-700">{bid.낙찰업체}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* 날짜 + 방법 */}
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-zinc-400">
+                {bid.공고일 && <span>공고 {bid.공고일}</span>}
+                {bid.마감일 && <span>마감 {bid.마감일}</span>}
+                {bid.개찰일 && <span>개찰 {bid.개찰일}</span>}
+                {(bid.입찰방법 || bid.예가방법) && (
+                  <span className="ml-auto">{[bid.입찰방법, bid.예가방법].filter(Boolean).join(' · ')}</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const INIT_FILTERS: FilterState = {
   search: '',
   program: [], material: [], mass: [], scale: [],
@@ -374,10 +492,14 @@ export default function Home() {
   const [filters, setFilters] = useState<FilterState>(INIT_FILTERS);
   const [showUpload, setShowUpload] = useState(false);
   const [prefill, setPrefill] = useState<Record<string, string> | null>(null);
-  const [tab, setTab] = useState<'refs' | 'competitions'>('refs');
+  const [editingRef, setEditingRef] = useState<Reference | null>(null);
+  const [tab, setTab] = useState<'refs' | 'competitions' | 'bids'>('refs');
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const syncingIds = useRef<Set<string>>(new Set());
+  const [bids, setBids] = useState<BidItem[]>([]);
+  const [bidsLoaded, setBidsLoaded] = useState(false);
+  const [bidStatusFilter, setBidStatusFilter] = useState<string>('공고중');
 
   const load = useCallback(async () => {
     const [r, c] = await Promise.all([getRefs(), getCollections()]);
@@ -390,6 +512,11 @@ export default function Home() {
   function handlePrefill(data: Record<string, string>) {
     setPrefill(data);
     setShowUpload(true);
+  }
+
+  function handleEdit(id: string) {
+    const ref = refs.find(r => r.id === id);
+    if (ref) setEditingRef(ref);
   }
 
   async function handleDelete(id: string) {
@@ -667,6 +794,20 @@ export default function Home() {
           >
             공모전 {competitionRefs.length > 0 && <span className="ml-1 text-xs text-zinc-400">{competitionRefs.length}</span>}
           </button>
+          <button
+            onClick={() => {
+              setTab('bids');
+              if (!bidsLoaded) {
+                fetch('/api/bids').then(r => r.json()).then((data: BidItem[]) => {
+                  setBids(data);
+                  setBidsLoaded(true);
+                }).catch(() => {});
+              }
+            }}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${tab === 'bids' ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-400 hover:text-zinc-700'}`}
+          >
+            입찰정보
+          </button>
         </div>
       </header>
 
@@ -730,6 +871,7 @@ export default function Home() {
                       ref_={ref}
                       collections={collections}
                       onDelete={handleDelete}
+                      onEdit={handleEdit}
                       onCollectionToggle={handleCollectionToggle}
                     />
                   ))}
@@ -748,13 +890,15 @@ export default function Home() {
               onDeleteCollection={handleDeleteCollection}
             />
           </>
-        ) : (
+        ) : tab === 'competitions' ? (
           <CompetitionView
             refs={competitionRefs}
             onStatusChange={handleCompetitionStatusChange}
             onDelete={handleDelete}
             onAutoFill={handleAutoFill}
           />
+        ) : (
+          <BidsView bids={bids} loaded={bidsLoaded} statusFilter={bidStatusFilter} onStatusFilter={setBidStatusFilter} />
         )}
       </div>
 
@@ -770,6 +914,23 @@ export default function Home() {
               prefill={prefill}
               onSave={async () => { setShowUpload(false); setPrefill(null); await load(); }}
               onCancel={() => { setShowUpload(false); setPrefill(null); }}
+            />
+          </div>
+        </div>
+      )}
+
+      {editingRef && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center overflow-y-auto py-8">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-bold text-zinc-900">레퍼런스 수정</h2>
+              <button onClick={() => setEditingRef(null)} className="text-zinc-400 hover:text-zinc-700 text-2xl leading-none">×</button>
+            </div>
+            <UploadForm
+              collections={collections}
+              editRef={editingRef}
+              onSave={async () => { setEditingRef(null); await load(); }}
+              onCancel={() => setEditingRef(null)}
             />
           </div>
         </div>

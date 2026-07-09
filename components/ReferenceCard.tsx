@@ -9,10 +9,11 @@ interface ReferenceCardProps {
   ref_: Reference;
   collections: Collection[];
   onDelete: (id: string) => void;
+  onEdit?: (id: string) => void;
   onCollectionToggle?: (refId: string, colId: string) => void;
 }
 
-export default function ReferenceCard({ ref_, collections, onDelete, onCollectionToggle }: ReferenceCardProps) {
+export default function ReferenceCard({ ref_, collections, onDelete, onEdit, onCollectionToggle }: ReferenceCardProps) {
   const [showFolderPicker, setShowFolderPicker] = useState(false);
   const [imgError, setImgError] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -169,9 +170,22 @@ export default function ReferenceCard({ ref_, collections, onDelete, onCollectio
             </div>
           )}
         </div>
+        {/* Edit button */}
+        {onEdit && (
+          <button
+            onClick={e => { e.preventDefault(); onEdit(ref_.id); }}
+            className="w-7 h-7 rounded-full bg-white/90 text-zinc-500 hover:text-zinc-900 hover:bg-white shadow flex items-center justify-center"
+            title="수정"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </button>
+        )}
         {/* Delete button */}
         <button
-          onClick={() => onDelete(ref_.id)}
+          onClick={e => { e.preventDefault(); onDelete(ref_.id); }}
           className="w-7 h-7 rounded-full bg-white/90 text-zinc-500 hover:text-red-500 hover:bg-white shadow flex items-center justify-center text-sm"
           title="삭제"
         >

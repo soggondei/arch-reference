@@ -3,13 +3,14 @@
 import { useState, useRef, useEffect } from 'react';
 import { Reference, Collection, RefType, REF_TYPE_LABEL, REF_TYPE_COLOR } from '@/lib/types';
 import { TAGS, TAG_LABELS, COLLECTION_COLORS, TagCategory } from '@/lib/tags';
-import { addRef, addCollection, generateId, uploadImage } from '@/lib/store';
+import { addRef, updateRef, addCollection, generateId, uploadImage } from '@/lib/store';
 import { SuggestedTags } from '@/lib/auto-tag';
 import TagBadge from './TagBadge';
 
 interface UploadFormProps {
   collections: Collection[];
   prefill?: Record<string, string> | null;
+  editRef?: Reference;
   onSave: () => void;
   onCancel: () => void;
 }
@@ -17,32 +18,32 @@ interface UploadFormProps {
 type TagFields = Pick<Reference['tags'], 'program' | 'material' | 'mass' | 'designItem' | 'site'>;
 const MULTI_TAG_CATEGORIES: (keyof TagFields)[] = ['program', 'material', 'mass', 'designItem', 'site'];
 
-export default function UploadForm({ collections, prefill, onSave, onCancel }: UploadFormProps) {
+export default function UploadForm({ collections, prefill, editRef, onSave, onCancel }: UploadFormProps) {
   const initialSuggested: SuggestedTags | null = (() => {
     try { return prefill?._suggestedTags ? JSON.parse(prefill._suggestedTags) : null; } catch { return null; }
   })();
 
-  const [title, setTitle] = useState(prefill?.title || '');
-  const [imageUrl, setImageUrl] = useState(prefill?.imageUrl || '');
-  const [sourceUrl, setSourceUrl] = useState(prefill?.sourceUrl || '');
-  const [architect, setArchitect] = useState('');
-  const [year, setYear] = useState('');
-  const [description, setDescription] = useState(prefill?.description || '');
-  const [scale, setScale] = useState(initialSuggested?.scale || '');
-  const [region, setRegion] = useState(initialSuggested?.region || '');
+  const [title, setTitle] = useState(editRef?.title || prefill?.title || '');
+  const [imageUrl, setImageUrl] = useState(editRef?.imageUrl || prefill?.imageUrl || '');
+  const [sourceUrl, setSourceUrl] = useState(editRef?.sourceUrl || prefill?.sourceUrl || '');
+  const [architect, setArchitect] = useState(editRef?.architect || '');
+  const [year, setYear] = useState(editRef?.year?.toString() || '');
+  const [description, setDescription] = useState(editRef?.description || prefill?.description || '');
+  const [scale, setScale] = useState(editRef?.tags.scale || initialSuggested?.scale || '');
+  const [region, setRegion] = useState(editRef?.tags.region || initialSuggested?.region || '');
   const [tags, setTags] = useState<TagFields>({
-    program: initialSuggested?.program || [],
-    material: initialSuggested?.material || [],
-    mass: initialSuggested?.mass || [],
-    designItem: initialSuggested?.designItem || [],
-    site: initialSuggested?.site || [],
+    program: editRef?.tags.program || initialSuggested?.program || [],
+    material: editRef?.tags.material || initialSuggested?.material || [],
+    mass: editRef?.tags.mass || initialSuggested?.mass || [],
+    designItem: editRef?.tags.designItem || initialSuggested?.designItem || [],
+    site: editRef?.tags.site || initialSuggested?.site || [],
   });
   const [suggestedTags, setSuggestedTags] = useState<SuggestedTags | null>(initialSuggested);
   const [autoTagApplied, setAutoTagApplied] = useState(initialSuggested !== null);
-  const [refType, setRefType] = useState<RefType | ''>('');
-  const [selectedCollections, setSelectedCollections] = useState<string[]>([]);
+  const [refType, setRefType] = useState<RefType | ''>(editRef?.refType || '');
+  const [selectedCollections, setSelectedCollections] = useState<string[]>(editRef?.collectionIds || []);
   const [newColName, setNewColName] = useState('');
-  const [imagePreview, setImagePreview] = useState(prefill?.imageUrl || '');
+  const [imagePreview, setImagePreview] = useState(editRef?.imageUrl || prefill?.imageUrl || '');
   const [fetching, setFetching] = useState(false);
   const [fetchError, setFetchError] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -51,7 +52,7 @@ export default function UploadForm({ collections, prefill, onSave, onCancel }: U
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (prefill?.sourceUrl) {
+    if (!editRef && prefill?.sourceUrl) {
       void handleFetchOG();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -182,8 +183,7 @@ export default function UploadForm({ collections, prefill, onSave, onCancel }: U
     if (!title.trim() || saving) return;
     setSaving(true);
     try {
-      const ref: Reference = {
-        id: generateId(),
+      const fields = {
         title: title.trim(),
         imageUrl,
         sourceUrl: sourceUrl.trim() || undefined,
@@ -193,9 +193,12 @@ export default function UploadForm({ collections, prefill, onSave, onCancel }: U
         refType: refType || undefined,
         tags: { ...tags, scale, region },
         collectionIds: selectedCollections,
-        createdAt: new Date().toISOString(),
       };
-      await addRef(ref);
+      if (editRef) {
+        await updateRef({ ...editRef, ...fields });
+      } else {
+        await addRef({ ...fields, id: generateId(), createdAt: new Date().toISOString() });
+      }
       onSave();
     } catch {
       setFetchError('저장 실패 — 다시 시도해 주세요');
@@ -549,7 +552,7 @@ export default function UploadForm({ collections, prefill, onSave, onCancel }: U
               <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               저장 중
             </>
-          ) : '저장'}
+          ) : editRef ? '수정 저장' : '저장'}
         </button>
         <button
           type="button"
