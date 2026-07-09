@@ -109,6 +109,19 @@ export async function deleteRef(id: string): Promise<void> {
   if (error) throw error;
 }
 
+// Notion 스케줄 페이지 아카이브 (백그라운드, fire-and-forget)
+export function archiveRefNotionSchedules(ref: Reference | null | undefined): void {
+  ref?.competitionData?.schedules
+    ?.filter(s => s.notionPageId)
+    .forEach(s => {
+      fetch('/api/notion-schedule', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notionPageId: s.notionPageId }),
+      }).catch(() => {});
+    });
+}
+
 // ── Collections ─────────────────────────────────────────────────────────────
 
 export async function getCollections(): Promise<Collection[]> {

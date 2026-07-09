@@ -252,8 +252,8 @@ export default function UploadForm({ collections, prefill, onSave, onCancel }: U
         {!autoTagApplied && <p className="text-xs text-zinc-400 mt-1.5">ArchDaily, Archinect, Archello 등 지원</p>}
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="col-span-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="col-span-1 sm:col-span-2">
           <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">제목 *</label>
           <input
             value={title}
@@ -406,7 +406,7 @@ export default function UploadForm({ collections, prefill, onSave, onCancel }: U
         </div>
       ))}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">규모</label>
