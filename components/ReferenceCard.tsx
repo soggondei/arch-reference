@@ -41,9 +41,9 @@ export default function ReferenceCard({ ref_, collections, onDelete, onEdit, onC
   const cd = ref_.competitionData;
   const dday = (() => {
     if (!cd?.submissionDate) return null;
-    const m = cd.submissionDate.match(/(\d{4}-\d{2}-\d{2})/);
-    if (!m) return null;
-    const deadline = new Date(m[1]);
+    const matches = cd.submissionDate.match(/\d{4}-\d{2}-\d{2}/g);
+    if (!matches) return null;
+    const deadline = new Date(matches[matches.length - 1]);
     const today = new Date(); today.setHours(0, 0, 0, 0);
     return Math.ceil((deadline.getTime() - today.getTime()) / 86400000);
   })();
