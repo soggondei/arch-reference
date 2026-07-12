@@ -323,6 +323,7 @@ export default function ScorerImportPage() {
           floorAreaText: item.floorAreaText || undefined,
           location: item.location || undefined,
           judges: item.judges && item.judges.length > 0 ? item.judges : undefined,
+          files: item.files && item.files.length > 0 ? item.files : undefined,
         };
         const ref: Reference = {
           id: generateId(),

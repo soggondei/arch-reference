@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Reference, Collection, CompetitionStatus, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, JudgeMember, ScheduleItem } from '@/lib/types';
+import { Reference, Collection, CompetitionStatus, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, JudgeMember, ScheduleItem, CompetitionFile } from '@/lib/types';
 import { getRefs, getCollections, updateRef, deleteRef, updateCompetitionStatus, archiveRefNotionSchedules } from '@/lib/store';
 import { generateScheduleTemplate } from '@/lib/schedule-template';
 import { TAG_LABELS, TagCategory } from '@/lib/tags';
@@ -25,11 +25,15 @@ function InfoRow({ label, value }: { label: string; value?: string }) {
 
 function getDDay(dateStr?: string): number | null {
   if (!dateStr) return null;
-  const m = dateStr.match(/(\d{4}-\d{2}-\d{2})/);
-  if (!m) return null;
-  const deadline = new Date(m[1]);
+  const matches = dateStr.match(/\d{4}-\d{2}-\d{2}/g);
+  if (!matches) return null;
+  const deadline = new Date(matches[matches.length - 1]);
   const today = new Date(); today.setHours(0, 0, 0, 0);
   return Math.ceil((deadline.getTime() - today.getTime()) / 86400000);
+}
+
+function fileExt(name: string): string {
+  return name.split('.').pop()?.toUpperCase() ?? 'FILE';
 }
 
 export default function ReferencePage() {
@@ -440,11 +444,39 @@ export default function ReferencePage() {
                       <div className="px-4 py-3 border-t border-zinc-100">
                         <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">심사위원</p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
-                          {cd.judges.map((j, i) => (
+                          {cd.judges.map((j: JudgeMember, i: number) => (
                             <div key={i} className="text-xs leading-snug">
                               <span className="font-medium text-zinc-700">{j.name}</span>
                               {j.affiliation && <span className="text-zinc-400 ml-1">({j.affiliation})</span>}
                             </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {cd.files && cd.files.length > 0 && (
+                      <div className="px-4 py-3 border-t border-zinc-100">
+                        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">관련 파일</p>
+                        <div className="flex flex-col gap-1.5">
+                          {cd.files.map((f: CompetitionFile, i: number) => (
+                            <a
+                              key={i}
+                              href={f.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2.5 group hover:bg-zinc-50 rounded-lg px-2 py-1.5 -mx-2 transition-colors"
+                            >
+                              <span className="shrink-0 text-[9px] font-bold text-white px-1.5 py-0.5 rounded bg-zinc-400 group-hover:bg-zinc-600 transition-colors">
+                                {fileExt(f.name)}
+                              </span>
+                              <span className="text-xs text-zinc-600 group-hover:text-zinc-900 truncate flex-1 transition-colors">
+                                {f.name}
+                              </span>
+                              <svg className="shrink-0 text-zinc-300 group-hover:text-zinc-500 transition-colors" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7 10 12 15 17 10"/>
+                                <line x1="12" y1="15" x2="12" y2="3"/>
+                              </svg>
+                            </a>
                           ))}
                         </div>
                       </div>

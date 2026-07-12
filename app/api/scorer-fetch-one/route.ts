@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { CompetitionData, JudgeMember } from '@/lib/types';
+import { CompetitionData, CompetitionFile, JudgeMember } from '@/lib/types';
 
 function parseJuriesFromHtml(html: string): JudgeMember[] {
   const judges: JudgeMember[] = [];
@@ -17,6 +17,22 @@ function parseJuriesFromHtml(html: string): JudgeMember[] {
     }
   }
   return judges;
+}
+
+function parseFilesFromHtml(html: string): CompetitionFile[] {
+  const files: CompetitionFile[] = [];
+  const sectionM = html.match(/class="inner-section-content file-list">([\s\S]*?)<\/div>/);
+  if (!sectionM) return files;
+  const re = /<a\s+href="([^"]+)"[^>]*>/g;
+  let m;
+  while ((m = re.exec(sectionM[1])) !== null) {
+    const url = m[1];
+    if (!url.startsWith('http')) continue;
+    const namePart = url.split('/').pop() ?? '';
+    const name = decodeURIComponent(namePart);
+    if (name) files.push({ name, url });
+  }
+  return files;
 }
 
 function parseDtDd(html: string): Map<string, string> {
@@ -84,6 +100,7 @@ export async function GET(req: NextRequest) {
       constructionCost: fields.get('공사비') || undefined,
       location: fields.get('위치') || (ogDesc.match(/위치\s*:\s*([^,]+)/)?.[1]?.trim() || undefined),
       judges: judges.length > 0 ? judges : undefined,
+      files: parseFilesFromHtml(html),
     };
 
     return NextResponse.json({ competitionData, architect });

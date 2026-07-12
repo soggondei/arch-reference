@@ -1,6 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { autoTag } from '@/lib/auto-tag';
-import { RefType, JudgeMember } from '@/lib/types';
+import { RefType, JudgeMember, CompetitionFile } from '@/lib/types';
+
+function parseFilesFromHtml(html: string): CompetitionFile[] {
+  const files: CompetitionFile[] = [];
+  const sectionM = html.match(/class="inner-section-content file-list">([\s\S]*?)<\/div>/);
+  if (!sectionM) return files;
+  const re = /<a\s+href="([^"]+)"[^>]*>/g;
+  let m;
+  while ((m = re.exec(sectionM[1])) !== null) {
+    const url = m[1];
+    if (!url.startsWith('http')) continue;
+    const namePart = url.split('/').pop() ?? '';
+    const name = decodeURIComponent(namePart);
+    if (name) files.push({ name, url });
+  }
+  return files;
+}
 
 function parseJuriesFromHtml(html: string): JudgeMember[] {
   const judges: JudgeMember[] = [];
@@ -50,6 +66,7 @@ export interface ScorerImportItem {
   resultDate: string;        // 당선작 발표일
   // 공통
   judges: JudgeMember[];
+  files: CompetitionFile[];
   refType: RefType;
   sourceUrl: string;
   suggestedTags: ReturnType<typeof autoTag>;
@@ -203,6 +220,7 @@ async function fetchItem(entry: SitemapEntry): Promise<ScorerImportItem | null> 
       judgeDate: fields.get('심사일') || '',
       resultDate: fields.get('당선작 발표일') || '',
       judges: parseJuriesFromHtml(html),
+      files: parseFilesFromHtml(html),
       refType: 'entry' as RefType,
       sourceUrl: url,
       suggestedTags: suggested,

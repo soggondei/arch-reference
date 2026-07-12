@@ -27,6 +27,11 @@ export const COMPETITION_STATUS_COLOR: Record<CompetitionStatus, string> = {
   '탈락':    '#ef4444',
 };
 
+export interface CompetitionFile {
+  name: string;
+  url: string;
+}
+
 export interface JudgeMember {
   name: string;
   affiliation?: string;
@@ -73,6 +78,7 @@ export interface CompetitionData {
   floorAreaText?: string;
   location?: string;
   judges?: JudgeMember[];
+  files?: CompetitionFile[];
   submissions?: string;
   notionPageId?: string;
   schedules?: ScheduleItem[];
