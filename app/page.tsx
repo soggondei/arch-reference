@@ -355,8 +355,10 @@ function CompetitionView({
   const [filling, setFilling] = useState(false);
 
   const missingDataCount = refs.filter(r =>
-    r.sourceUrl?.includes('scorer.co.kr') &&
-    !r.competitionData?.submissionDate && !r.competitionData?.designFee
+    r.sourceUrl?.includes('scorer.co.kr') && (
+      (!r.competitionData?.submissionDate && !r.competitionData?.designFee) ||
+      !r.competitionData?.files?.length
+    )
   ).length;
 
   async function handleAutoFill() {
@@ -571,8 +573,10 @@ export default function Home() {
 
   async function handleAutoFill() {
     const missing = competitionRefs.filter(r =>
-      r.sourceUrl?.includes('scorer.co.kr') &&
-      !r.competitionData?.submissionDate && !r.competitionData?.designFee
+      r.sourceUrl?.includes('scorer.co.kr') && (
+        (!r.competitionData?.submissionDate && !r.competitionData?.designFee) ||
+        !r.competitionData?.files?.length
+      )
     );
     const CONCURRENCY = 3;
     for (let i = 0; i < missing.length; i += CONCURRENCY) {
@@ -582,7 +586,11 @@ export default function Home() {
           if (!res.ok) return;
           const { competitionData: fetched } = await res.json();
           if (!fetched) return;
-          const updated = { ...r.competitionData!, ...fetched };
+          const updated = {
+            ...r.competitionData!,
+            ...fetched,
+            files: fetched.files?.length ? fetched.files : r.competitionData?.files,
+          };
           await updateCompetitionStatus(r.id, updated);
           setRefs(prev => prev.map(x => x.id === r.id ? { ...x, competitionData: updated } : x));
         } catch { /* skip */ }
