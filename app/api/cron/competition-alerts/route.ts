@@ -8,10 +8,10 @@ const ALERT_DAYS = [1, 3, 7]; // D-day 이 일수 남았을 때 알림
 
 function getDDay(dateStr?: string): number | null {
   if (!dateStr) return null;
-  const m = dateStr.match(/(\d{4}-\d{2}-\d{2})/);
-  if (!m) return null;
-  const deadline = new Date(m[1]);
-  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const matches = dateStr.match(/\d{4}-\d{2}-\d{2}/g);
+  if (!matches) return null;
+  const deadline = new Date(matches[matches.length - 1]);
+  const today = new Date(); today.setUTCHours(0, 0, 0, 0);
   return Math.ceil((deadline.getTime() - today.getTime()) / 86400000);
 }
 
