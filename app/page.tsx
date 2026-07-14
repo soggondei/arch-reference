@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Reference, Collection, FilterState, CompetitionStatus, CompetitionData, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, ScheduleItem } from '@/lib/types';
+import { Reference, Collection, FilterState, CompetitionStatus, CompetitionData, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, ScheduleItem, LINK_CATEGORIES } from '@/lib/types';
 import { COLLECTION_COLORS } from '@/lib/tags';
 import { getRefs, getCollections, deleteRef, addCollection, deleteCollection, updateRef, generateId, updateCompetitionStatus, archiveRefNotionSchedules } from '@/lib/store';
 import { autoTag } from '@/lib/auto-tag';
@@ -11,7 +11,175 @@ import ReferenceCard from '@/components/ReferenceCard';
 import FilterPanel from '@/components/FilterPanel';
 import FilterSheet from '@/components/FilterSheet';
 import UploadForm from '@/components/UploadForm';
+import LinkForm from '@/components/LinkForm';
 import Link from 'next/link';
+
+// ── 링크 즐겨찾기 ──────────────────────────────────────────────────────────
+function LinkCard({
+  ref_,
+  onEdit,
+  onDelete,
+}: { ref_: Reference; onEdit: (id: string) => void; onDelete: (id: string) => void }) {
+  let domain = '';
+  try { domain = new URL(ref_.sourceUrl || '').hostname.replace(/^www\./, ''); } catch { /* noop */ }
+
+  return (
+    <div className="group relative bg-white border border-zinc-100 hover:border-zinc-300 hover:shadow-sm rounded-xl px-4 py-3 flex items-start gap-3 transition-all">
+      {/* favicon */}
+      <div className="shrink-0 w-9 h-9 rounded-lg bg-zinc-50 border border-zinc-100 flex items-center justify-center overflow-hidden mt-0.5">
+        {ref_.sourceUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={`https://www.google.com/s2/favicons?sz=32&domain=${encodeURIComponent(domain)}`}
+            alt=""
+            className="w-5 h-5"
+            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" />
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+          </svg>
+        )}
+      </div>
+
+      {/* 내용 */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start gap-2">
+          <a
+            href={ref_.sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm font-semibold text-zinc-900 hover:text-blue-600 transition-colors leading-snug line-clamp-1 flex-1"
+          >
+            {ref_.title}
+          </a>
+          {ref_.tags.linkCategory && (
+            <span className="shrink-0 text-[10px] font-medium text-cyan-700 bg-cyan-50 px-1.5 py-0.5 rounded">
+              {ref_.tags.linkCategory}
+            </span>
+          )}
+        </div>
+        {domain && <p className="text-xs text-zinc-400 mt-0.5 truncate">{domain}</p>}
+        {ref_.description && <p className="text-xs text-zinc-500 mt-1 line-clamp-2">{ref_.description}</p>}
+      </div>
+
+      {/* 수정/삭제 버튼 (hover) */}
+      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={() => onEdit(ref_.id)}
+          className="w-6 h-6 rounded-full bg-white border border-zinc-200 text-zinc-500 hover:text-zinc-900 shadow-sm flex items-center justify-center"
+          title="수정"
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+        </button>
+        <button
+          onClick={() => onDelete(ref_.id)}
+          className="w-6 h-6 rounded-full bg-white border border-zinc-200 text-zinc-400 hover:text-red-500 shadow-sm flex items-center justify-center text-sm leading-none"
+          title="삭제"
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function LinkView({
+  links,
+  onAdd,
+  onEdit,
+  onDelete,
+}: {
+  links: Reference[];
+  onAdd: () => void;
+  onEdit: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [search, setSearch] = useState('');
+  const [catFilter, setCatFilter] = useState('');
+
+  const filtered = links.filter(r => {
+    if (catFilter && r.tags.linkCategory !== catFilter) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      const text = [r.title, r.description, r.sourceUrl, r.tags.linkCategory].join(' ').toLowerCase();
+      if (!text.includes(q)) return false;
+    }
+    return true;
+  });
+
+  return (
+    <div className="flex-1 min-w-0">
+      {/* 검색 + 카테고리 필터 */}
+      <div className="flex flex-wrap items-center gap-2 mb-5">
+        <div className="relative">
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="링크 검색..."
+            className="pl-8 pr-3 py-1.5 bg-zinc-100 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-zinc-300 w-48"
+          />
+          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+        </div>
+        <button
+          onClick={() => setCatFilter('')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${!catFilter ? 'bg-zinc-900 text-white border-zinc-900' : 'border-zinc-200 text-zinc-500'}`}
+        >
+          전체 {links.length}
+        </button>
+        {LINK_CATEGORIES.map(cat => {
+          const cnt = links.filter(r => r.tags.linkCategory === cat).length;
+          if (cnt === 0) return null;
+          return (
+            <button
+              key={cat}
+              onClick={() => setCatFilter(prev => prev === cat ? '' : cat)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${catFilter === cat ? 'bg-cyan-700 text-white border-cyan-700' : 'border-zinc-200 text-zinc-500'}`}
+            >
+              {cat} {cnt}
+            </button>
+          );
+        })}
+        <button
+          onClick={onAdd}
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-900 text-white hover:bg-zinc-700 transition-colors"
+        >
+          <span className="text-base leading-none">+</span> 링크 추가
+        </button>
+      </div>
+
+      {links.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="text-zinc-200 mb-4">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+              <circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" />
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            </svg>
+          </div>
+          <p className="text-zinc-500 font-medium">저장된 링크가 없습니다</p>
+          <p className="text-zinc-400 text-sm mt-1">자주 찾는 사이트를 즐겨찾기로 저장해 보세요</p>
+          <button onClick={onAdd} className="mt-4 bg-zinc-900 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-zinc-700 transition-colors">
+            링크 추가
+          </button>
+        </div>
+      ) : filtered.length === 0 ? (
+        <p className="text-zinc-400 text-sm py-12 text-center">검색 결과가 없습니다</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {filtered.map(ref => (
+            <LinkCard key={ref.id} ref_={ref} onEdit={onEdit} onDelete={onDelete} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── 입찰정보 ────────────────────────────────────────────────────────────────
 interface BidItem {
@@ -515,7 +683,9 @@ export default function Home() {
   const [showUpload, setShowUpload] = useState(false);
   const [prefill, setPrefill] = useState<Record<string, string> | null>(null);
   const [editingRef, setEditingRef] = useState<Reference | null>(null);
-  const [tab, setTab] = useState<'refs' | 'competitions' | 'bids'>('refs');
+  const [tab, setTab] = useState<'refs' | 'competitions' | 'bids' | 'links'>('refs');
+  const [showLinkForm, setShowLinkForm] = useState(false);
+  const [editingLink, setEditingLink] = useState<Reference | null>(null);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const syncingIds = useRef<Set<string>>(new Set());
@@ -727,8 +897,9 @@ export default function Home() {
     }
   }
 
-  // 레퍼런스 vs 공모전 분리
-  const regularRefs = refs.filter(r => !r.competitionData);
+  // 레퍼런스 / 공모전 / 링크 분리
+  const linkRefs = refs.filter(r => r.refType === 'link');
+  const regularRefs = refs.filter(r => !r.competitionData && r.refType !== 'link');
   const competitionRefs = refs.filter(r => r.competitionData);
 
   const filtered = regularRefs.filter(ref => {
@@ -832,9 +1003,15 @@ export default function Home() {
                 }).catch(() => {});
               }
             }}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${tab === 'bids' ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-400 hover:text-zinc-700'}`}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${tab === 'bids' ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-400 hover:text-zinc-700'}`}
           >
             입찰정보
+          </button>
+          <button
+            onClick={() => setTab('links')}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${tab === 'links' ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-400 hover:text-zinc-700'}`}
+          >
+            링크 {linkRefs.length > 0 && <span className="ml-1 text-xs text-zinc-400">{linkRefs.length}</span>}
           </button>
         </div>
       </header>
@@ -925,8 +1102,18 @@ export default function Home() {
             onDelete={handleDelete}
             onAutoFill={handleAutoFill}
           />
-        ) : (
+        ) : tab === 'bids' ? (
           <BidsView bids={bids} loaded={bidsLoaded} statusFilter={bidStatusFilter} onStatusFilter={setBidStatusFilter} />
+        ) : (
+          <LinkView
+            links={linkRefs}
+            onAdd={() => setShowLinkForm(true)}
+            onEdit={id => {
+              const r = refs.find(x => x.id === id);
+              if (r) setEditingLink(r);
+            }}
+            onDelete={handleDelete}
+          />
         )}
       </div>
 
@@ -959,6 +1146,27 @@ export default function Home() {
               editRef={editingRef}
               onSave={async () => { setEditingRef(null); await load(); }}
               onCancel={() => setEditingRef(null)}
+            />
+          </div>
+        </div>
+      )}
+
+      {(showLinkForm || editingLink) && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center overflow-y-auto py-8">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-bold text-zinc-900">{editingLink ? '링크 수정' : '링크 추가'}</h2>
+              <button
+                onClick={() => { setShowLinkForm(false); setEditingLink(null); }}
+                className="text-zinc-400 hover:text-zinc-700 text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <LinkForm
+              editRef={editingLink ?? undefined}
+              onSave={async () => { setShowLinkForm(false); setEditingLink(null); await load(); }}
+              onCancel={() => { setShowLinkForm(false); setEditingLink(null); }}
             />
           </div>
         </div>

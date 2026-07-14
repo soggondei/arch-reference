@@ -1,10 +1,11 @@
-export type RefType = 'built' | 'winner' | 'entry' | 'idea';
+export type RefType = 'built' | 'winner' | 'entry' | 'idea' | 'link';
 
 export const REF_TYPE_LABEL: Record<RefType, string> = {
   built: '실현작',
   winner: '당선작',
   entry: '공모참가',
   idea: '아이디어',
+  link: '링크',
 };
 
 export const REF_TYPE_COLOR: Record<RefType, string> = {
@@ -12,7 +13,11 @@ export const REF_TYPE_COLOR: Record<RefType, string> = {
   winner: '#15803d',
   entry:  '#b45309',
   idea:   '#7c3aed',
+  link:   '#0891b2',
 };
+
+export const LINK_CATEGORIES = ['설계도구', '법규/정보', '재료/제품', '공모/입찰', '레퍼런스', '기타'] as const;
+export type LinkCategory = typeof LINK_CATEGORIES[number];
 
 export const COMPETITION_STATUSES = ['관심', '등록예정', '등록완료', '작업중', '제출완료', '입선', '탈락'] as const;
 export type CompetitionStatus = typeof COMPETITION_STATUSES[number];
@@ -98,6 +103,7 @@ export interface Reference {
     designItem: string[];
     site: string[];
     region: string;
+    linkCategory?: string;
   };
   architect?: string;
   year?: number;
