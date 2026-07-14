@@ -142,7 +142,7 @@ function getDDay(dateStr?: string): number | null {
   if (!dateStr) return null;
   const matches = dateStr.match(/\d{4}-\d{2}-\d{2}/g);
   if (!matches) return null;
-  const deadline = new Date(matches[matches.length - 1]);
+  const deadline = new Date(matches[matches.length - 1] + 'T00:00:00');
   const today = new Date(); today.setHours(0, 0, 0, 0);
   return Math.ceil((deadline.getTime() - today.getTime()) / 86400000);
 }

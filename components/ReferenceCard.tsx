@@ -43,7 +43,7 @@ export default function ReferenceCard({ ref_, collections, onDelete, onEdit, onC
     if (!cd?.submissionDate) return null;
     const matches = cd.submissionDate.match(/\d{4}-\d{2}-\d{2}/g);
     if (!matches) return null;
-    const deadline = new Date(matches[matches.length - 1]);
+    const deadline = new Date(matches[matches.length - 1] + 'T00:00:00');
     const today = new Date(); today.setHours(0, 0, 0, 0);
     return Math.ceil((deadline.getTime() - today.getTime()) / 86400000);
   })();
