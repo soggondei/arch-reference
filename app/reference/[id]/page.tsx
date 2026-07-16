@@ -44,6 +44,7 @@ export default function ReferencePage() {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [editingNote, setEditingNote] = useState(false);
   const [noteValue, setNoteValue] = useState('');
+  const [aiMemoLoading, setAiMemoLoading] = useState(false);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
   const [editingCompetition, setEditingCompetition] = useState(false);
   const [competitionForm, setCompetitionForm] = useState<Record<string, string>>({});
@@ -66,6 +67,25 @@ export default function ReferencePage() {
     await updateRef(updated);
     setRef(updated);
     setEditingNote(false);
+  }
+
+  async function handleAiMemo() {
+    if (!ref_?.imageUrl || aiMemoLoading) return;
+    setAiMemoLoading(true);
+    try {
+      const res = await fetch('/api/ai-memo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: ref_.imageUrl }),
+      });
+      if (!res.ok) return;
+      const { memo } = await res.json() as { memo?: string };
+      if (!memo) return;
+      setNoteValue(memo);
+      setEditingNote(true);
+    } finally {
+      setAiMemoLoading(false);
+    }
   }
 
   async function handleDelete() {
@@ -562,11 +582,29 @@ export default function ReferencePage() {
             <div className="border-t border-zinc-100 pt-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">메모</span>
-                {!editingNote && (
-                  <button onClick={() => setEditingNote(true)} className="text-xs text-zinc-400 hover:text-zinc-700 underline">
-                    {ref_.description ? '수정' : '추가'}
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {!editingNote && ref_.imageUrl && (
+                    <button
+                      onClick={() => void handleAiMemo()}
+                      disabled={aiMemoLoading}
+                      className="text-xs text-violet-500 hover:text-violet-700 disabled:opacity-50 flex items-center gap-1"
+                    >
+                      {aiMemoLoading ? (
+                        <span className="w-3 h-3 border border-violet-300 border-t-violet-600 rounded-full animate-spin" />
+                      ) : (
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><path d="M18 2v4"/><path d="M20 0v4"/>
+                        </svg>
+                      )}
+                      AI 생성
+                    </button>
+                  )}
+                  {!editingNote && (
+                    <button onClick={() => setEditingNote(true)} className="text-xs text-zinc-400 hover:text-zinc-700 underline">
+                      {ref_.description ? '수정' : '추가'}
+                    </button>
+                  )}
+                </div>
               </div>
               {editingNote ? (
                 <div className="flex flex-col gap-2">
