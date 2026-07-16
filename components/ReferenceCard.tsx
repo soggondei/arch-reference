@@ -127,6 +127,11 @@ export default function ReferenceCard({ ref_, collections, onDelete, onEdit, onC
           {allTags.length > 4 && (
             <span className="text-xs text-zinc-400">+{allTags.length - 4}</span>
           )}
+          {allTags.length === 0 && ref_.imageUrl && !ref_.competitionData && (
+            <span className="text-xs text-amber-500 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+              미태깅
+            </span>
+          )}
         </div>
       </div>
 

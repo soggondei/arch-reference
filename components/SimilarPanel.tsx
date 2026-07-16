@@ -27,6 +27,14 @@ export default function SimilarPanel({ target, allRefs, collections, onRefAdded 
   const inAppSimilar = getSimilarRefs(target, allRefs, 6);
   const searchQuery = buildSearchQuery(target);
 
+  function getMatchingTags(ref: Reference): string[] {
+    return [
+      ...target.tags.program.filter(t => ref.tags.program.includes(t)),
+      ...target.tags.material.filter(t => ref.tags.material.includes(t)),
+      ...target.tags.mass.filter(t => ref.tags.mass.includes(t)),
+    ];
+  }
+
   async function loadWebSuggestions() {
     if (webResults.length > 0) return;
     setLoading(true);
@@ -131,14 +139,14 @@ export default function SimilarPanel({ target, allRefs, collections, onRefAdded 
                   </div>
                   <div className="p-2">
                     <p className="text-xs font-medium text-zinc-800 leading-tight line-clamp-2">{ref.title}</p>
-                    <div className="flex items-center justify-between mt-1">
-                      <p className="text-xs text-zinc-400">{ref.architect || ''}</p>
-                      <span className="text-xs text-zinc-300">일치 {score.toFixed(0)}점</span>
-                    </div>
+                    {ref.architect && <p className="text-xs text-zinc-400 mt-0.5">{ref.architect}</p>}
                     <div className="flex flex-wrap gap-1 mt-1">
-                      {[...ref.tags.program, ...ref.tags.material].slice(0, 2).map(t => (
+                      {getMatchingTags(ref).slice(0, 3).map(t => (
                         <TagBadge key={t} label={t} />
                       ))}
+                      {getMatchingTags(ref).length === 0 && (
+                        <span className="text-xs text-zinc-300">일치 {score.toFixed(0)}점</span>
+                      )}
                     </div>
                   </div>
                 </Link>
