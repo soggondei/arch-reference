@@ -350,11 +350,15 @@ export default function ReferencePage() {
 
             {/* 법규검토 연동 버튼 */}
             {!ref_.competitionData && ref_.refType !== 'link' && (() => {
-              const location = ref_.tags.region || '';
+              const PROGRAM_TO_USE: Record<string, string> = {
+                '주거': '단독주택', '상업': '제1종근린생활시설', '업무': '업무시설',
+                '문화': '문화 및 집회시설', '교육': '교육연구시설', '의료': '의료시설',
+                '종교': '종교시설', '산업': '공장', '공공': '공공용시설',
+              };
               const program = ref_.tags.program[0] || '';
+              const lawUse = PROGRAM_TO_USE[program] || '';
               const params = new URLSearchParams();
-              if (location) params.set('region', location);
-              if (program) params.set('program', program);
+              if (lawUse) params.set('use', lawUse);
               const qs = params.toString();
               return (
                 <a
