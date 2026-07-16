@@ -692,6 +692,8 @@ export default function Home() {
   const [bids, setBids] = useState<BidItem[]>([]);
   const [bidsLoaded, setBidsLoaded] = useState(false);
   const [bidStatusFilter, setBidStatusFilter] = useState<string>('공고중');
+  const [batchTagging, setBatchTagging] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
 
   const load = useCallback(async () => {
     const [r, c] = await Promise.all([getRefs(), getCollections()]);
@@ -897,6 +899,38 @@ export default function Home() {
     }
   }
 
+  async function handleBatchTag() {
+    if (batchTagging) return;
+    const untagged = refs.filter(r =>
+      !r.competitionData && r.refType !== 'link' &&
+      r.imageUrl && r.tags.program.length === 0 && r.tags.material.length === 0
+    );
+    if (untagged.length === 0) return;
+    setBatchTagging(true);
+    setBatchProgress({ done: 0, total: untagged.length });
+    const CONCURRENCY = 2;
+    for (let i = 0; i < untagged.length; i += CONCURRENCY) {
+      await Promise.all(untagged.slice(i, i + CONCURRENCY).map(async r => {
+        try {
+          const res = await fetch('/api/ai-tag', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imageUrl: r.imageUrl }),
+          });
+          if (!res.ok) return;
+          const { suggestedTags } = await res.json() as { suggestedTags?: Record<string, unknown> };
+          if (!suggestedTags) return;
+          const updated = { ...r, tags: { ...r.tags, ...suggestedTags } };
+          await updateRef(updated);
+          setRefs(prev => prev.map(x => x.id === r.id ? updated : x));
+        } catch { /* skip */ }
+        setBatchProgress(p => p ? { ...p, done: p.done + 1 } : null);
+      }));
+    }
+    setBatchTagging(false);
+    setBatchProgress(null);
+  }
+
   // 레퍼런스 / 공모전 / 링크 분리
   const linkRefs = refs.filter(r => r.refType === 'link');
   const regularRefs = refs.filter(r => !r.competitionData && r.refType !== 'link');
@@ -1031,20 +1065,50 @@ export default function Home() {
               />
             </div>
             <main className="flex-1 min-w-0">
-              <button
-                onClick={() => setFilterSheetOpen(true)}
-                className="md:hidden mb-4 flex items-center gap-2 border border-zinc-200 rounded-lg px-3 py-2 text-sm text-zinc-600 bg-white"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="4" y1="6" x2="20" y2="6" /><line x1="7" y1="12" x2="17" y2="12" /><line x1="10" y1="18" x2="14" y2="18" />
-                </svg>
-                필터
-                {activeFilterCount > 0 && (
-                  <span className="bg-zinc-900 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                    {activeFilterCount}
-                  </span>
-                )}
-              </button>
+              {/* 모바일 필터 버튼 + AI 태깅 버튼 */}
+              <div className="flex items-center gap-2 mb-4">
+                <button
+                  onClick={() => setFilterSheetOpen(true)}
+                  className="md:hidden flex items-center gap-2 border border-zinc-200 rounded-lg px-3 py-2 text-sm text-zinc-600 bg-white"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="4" y1="6" x2="20" y2="6" /><line x1="7" y1="12" x2="17" y2="12" /><line x1="10" y1="18" x2="14" y2="18" />
+                  </svg>
+                  필터
+                  {activeFilterCount > 0 && (
+                    <span className="bg-zinc-900 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                </button>
+                {(() => {
+                  const untaggedCount = regularRefs.filter(r =>
+                    r.imageUrl && r.tags.program.length === 0 && r.tags.material.length === 0
+                  ).length;
+                  if (untaggedCount === 0) return null;
+                  return (
+                    <button
+                      onClick={() => void handleBatchTag()}
+                      disabled={batchTagging}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-dashed border-zinc-300 text-zinc-500 hover:border-zinc-500 hover:text-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all bg-white"
+                    >
+                      {batchTagging && batchProgress ? (
+                        <>
+                          <span className="w-3 h-3 border border-zinc-400 border-t-zinc-700 rounded-full animate-spin" />
+                          AI 태깅 중... ({batchProgress.done}/{batchProgress.total})
+                        </>
+                      ) : (
+                        <>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+                          </svg>
+                          AI 자동 태깅 ({untaggedCount}개)
+                        </>
+                      )}
+                    </button>
+                  );
+                })()}
+              </div>
               {filtered.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-24 text-center">
                   {regularRefs.length === 0 ? (
