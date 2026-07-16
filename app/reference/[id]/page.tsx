@@ -348,6 +348,33 @@ export default function ReferencePage() {
               </a>
             )}
 
+            {/* 법규검토 연동 버튼 */}
+            {!ref_.competitionData && ref_.refType !== 'link' && (() => {
+              const location = ref_.tags.region || '';
+              const program = ref_.tags.program[0] || '';
+              const params = new URLSearchParams();
+              if (location) params.set('region', location);
+              if (program) params.set('program', program);
+              const qs = params.toString();
+              return (
+                <a
+                  href={`https://law-review-web.vercel.app${qs ? `?${qs}` : ''}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors w-fit"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                  </svg>
+                  법규검토 열기
+                  {program && <span className="opacity-60">({program})</span>}
+                </a>
+              );
+            })()}
+
             {/* 공모전 상세 정보 */}
             {cd && (
               <div className="border border-zinc-100 rounded-xl overflow-hidden">

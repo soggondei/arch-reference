@@ -994,6 +994,7 @@ export default function Home() {
 
           <div className="ml-auto flex items-center gap-2 shrink-0">
             <MobileMoreMenu />
+            <Link href="/stats" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden md:block">통계</Link>
             <Link href="/seoul-import" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden md:block">서울시 공모전</Link>
             <Link href="/scorer-import" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden md:block">스코어러</Link>
             <Link href="/bookmarklet" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors hidden md:block">북마클릿</Link>
