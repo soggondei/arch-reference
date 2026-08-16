@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Reference, Collection, CompetitionData } from './types';
+import { Reference, Collection, CompetitionData, BidParticipation } from './types';
 
 // ── Row mappers ─────────────────────────────────────────────────────────────
 
@@ -163,6 +163,35 @@ export async function deleteCollection(id: string): Promise<void> {
       )
     );
   }
+}
+
+// ── Bid Participations ──────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toBidParticipation(row: any): BidParticipation {
+  return {
+    bidNo: row.bid_no,
+    status: row.status,
+    submittedPrice: row.submitted_price ?? null,
+    submittedDate: row.submitted_date ?? null,
+  };
+}
+
+export async function getBidParticipations(): Promise<BidParticipation[]> {
+  const { data, error } = await supabase.from('bid_participations').select('*');
+  if (error) throw error;
+  return (data ?? []).map(toBidParticipation);
+}
+
+export async function upsertBidParticipation(p: BidParticipation): Promise<void> {
+  const { error } = await supabase.from('bid_participations').upsert({
+    bid_no: p.bidNo,
+    status: p.status,
+    submitted_price: p.status === '참가완료' ? p.submittedPrice : null,
+    submitted_date: p.status === '참가완료' ? p.submittedDate : null,
+    updated_at: new Date().toISOString(),
+  });
+  if (error) throw error;
 }
 
 // ── Image Upload ────────────────────────────────────────────────────────────
