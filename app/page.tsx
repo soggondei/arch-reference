@@ -201,6 +201,20 @@ const BID_STATUS_COLOR: Record<string, string> = {
   '공고중': '#3b82f6', '낙찰': '#22c55e', '유찰': '#94a3b8',
 };
 
+const AGENCY_TYPES = ['교육청', '지자체', '조달청', '농어촌·수산', '국방·군부대', '대학교', '공사·공단·진흥원', '기타'] as const;
+type AgencyType = typeof AGENCY_TYPES[number];
+
+function classifyAgency(공고기관: string): AgencyType {
+  if (공고기관.includes('교육청')) return '교육청';
+  if (공고기관.includes('조달청')) return '조달청';
+  if (/국방부|군부대|사단|여단|해병대|공군|해군|육군|방위사업청|국군/.test(공고기관)) return '국방·군부대';
+  if (/농어촌공사|수산|어항|어촌/.test(공고기관)) return '농어촌·수산';
+  if (공고기관.includes('대학교')) return '대학교';
+  if (/공사|공단|진흥원|재단법인|연구소|본부/.test(공고기관)) return '공사·공단·진흥원';
+  if (/특별시|광역시|특별자치시|특별자치도|도|시|군|구/.test(공고기관)) return '지자체';
+  return '기타';
+}
+
 const PARTICIPATION_FILTERS = ['전체', '참가필요', '참가완료', '패스'] as const;
 type ParticipationFilter = typeof PARTICIPATION_FILTERS[number];
 
@@ -323,21 +337,33 @@ function BidParticipationControl({
 function BidsView({
   bids, loaded, error, statusFilter, onStatusFilter,
   participations, participationFilter, onParticipationFilter, onParticipationChange,
+  searchQuery, onSearchQuery, regionFilter, onRegionFilter, agencyTypeFilter, onAgencyTypeFilter,
 }: {
   bids: BidItem[]; loaded: boolean; error: boolean; statusFilter: string; onStatusFilter: (s: string) => void;
   participations: Record<string, BidParticipation | undefined>;
   participationFilter: ParticipationFilter;
   onParticipationFilter: (f: ParticipationFilter) => void;
   onParticipationChange: (p: BidParticipation) => Promise<void>;
+  searchQuery: string;
+  onSearchQuery: (q: string) => void;
+  regionFilter: string;
+  onRegionFilter: (r: string) => void;
+  agencyTypeFilter: AgencyType | '전체';
+  onAgencyTypeFilter: (a: AgencyType | '전체') => void;
 }) {
   const statuses = ['공고중', '낙찰', '유찰'];
   const counts = Object.fromEntries(statuses.map(s => [s, bids.filter(b => b.상태 === s).length]));
+  const regions = Array.from(new Set(bids.map(b => b.지역).filter(Boolean))).sort();
+  const q = searchQuery.trim().toLowerCase();
   const filtered = bids.filter(b => {
     if (b.상태 !== statusFilter) return false;
     const pStatus = participations[b.공고번호]?.status ?? '미정';
-    if (participationFilter === '전체') return true;
-    if (participationFilter === '참가필요') return pStatus === '미정' || pStatus === '참가예정';
-    return pStatus === participationFilter;
+    if (participationFilter === '참가필요' && !(pStatus === '미정' || pStatus === '참가예정')) return false;
+    if (participationFilter !== '전체' && participationFilter !== '참가필요' && pStatus !== participationFilter) return false;
+    if (regionFilter !== '전체' && b.지역 !== regionFilter) return false;
+    if (agencyTypeFilter !== '전체' && classifyAgency(b.공고기관) !== agencyTypeFilter) return false;
+    if (q && !b.공고명.toLowerCase().includes(q) && !b.공고기관.toLowerCase().includes(q)) return false;
+    return true;
   });
 
   if (!loaded) {
@@ -350,6 +376,27 @@ function BidsView({
 
   return (
     <div className="flex-1 min-w-0">
+      {/* 검색 + 지역 */}
+      <div className="flex gap-2 mb-3">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={e => onSearchQuery(e.target.value)}
+          placeholder="공고명·공고기관 검색"
+          className="flex-1 min-w-0 border border-zinc-200 rounded-lg px-3 py-1.5 text-sm"
+        />
+        <select
+          value={regionFilter}
+          onChange={e => onRegionFilter(e.target.value)}
+          className="border border-zinc-200 rounded-lg px-2 py-1.5 text-sm text-zinc-700 shrink-0"
+        >
+          <option value="전체">전체 지역</option>
+          {regions.map(r => (
+            <option key={r} value={r}>{r}</option>
+          ))}
+        </select>
+      </div>
+
       {/* 상태 필터 */}
       <div className="flex gap-2 mb-5">
         {statuses.map(s => (
@@ -374,6 +421,18 @@ function BidsView({
             className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${participationFilter === f ? 'bg-zinc-900 text-white shadow-sm' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}
           >
             {f}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-5">
+        {(['전체', ...AGENCY_TYPES] as const).map(a => (
+          <button
+            key={a}
+            onClick={() => onAgencyTypeFilter(a)}
+            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${agencyTypeFilter === a ? 'bg-zinc-900 text-white shadow-sm' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}
+          >
+            {a}
           </button>
         ))}
       </div>
@@ -857,6 +916,9 @@ export default function Home() {
   const [bidStatusFilter, setBidStatusFilter] = useState<string>('공고중');
   const [participations, setParticipations] = useState<Record<string, BidParticipation | undefined>>({});
   const [participationFilter, setParticipationFilter] = useState<ParticipationFilter>('전체');
+  const [bidSearchQuery, setBidSearchQuery] = useState('');
+  const [bidRegionFilter, setBidRegionFilter] = useState('전체');
+  const [bidAgencyTypeFilter, setBidAgencyTypeFilter] = useState<AgencyType | '전체'>('전체');
   const [batchTagging, setBatchTagging] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
 
@@ -1372,6 +1434,12 @@ export default function Home() {
             participationFilter={participationFilter}
             onParticipationFilter={setParticipationFilter}
             onParticipationChange={handleParticipationChange}
+            searchQuery={bidSearchQuery}
+            onSearchQuery={setBidSearchQuery}
+            regionFilter={bidRegionFilter}
+            onRegionFilter={setBidRegionFilter}
+            agencyTypeFilter={bidAgencyTypeFilter}
+            onAgencyTypeFilter={setBidAgencyTypeFilter}
           />
         ) : (
           <LinkView
