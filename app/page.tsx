@@ -215,6 +215,37 @@ function classifyAgency(공고기관: string): AgencyType {
   return '기타';
 }
 
+type Outcome = '낙찰' | '패찰' | '결과대기';
+
+const OUTCOME_COLOR: Record<Outcome, string> = {
+  '낙찰': '#22c55e',
+  '패찰': '#ef4444',
+  '결과대기': '#d4d4d8',
+};
+
+// 상호명 정확 일치일 때만 낙찰로 판정 (오탐 방지 — 부분일치 금지)
+const OUR_COMPANY_NAME = 'LV LAB건축사사무소';
+
+function deriveOutcome(bid: BidItem, p: BidParticipation | undefined): Outcome | null {
+  if (p?.status !== '참가완료') return null;
+  if (!bid.낙찰업체) return '결과대기';
+  return bid.낙찰업체.trim() === OUR_COMPANY_NAME ? '낙찰' : '패찰';
+}
+
+// 패찰 건들의 "우리 제출률 - 실제낙찰률" 평균 (%p). 표본 3건 미만이면 null.
+function computePersonalBias(bids: BidItem[], participations: Record<string, BidParticipation | undefined>): number | null {
+  const gaps: number[] = [];
+  for (const bid of bids) {
+    const p = participations[bid.공고번호];
+    if (deriveOutcome(bid, p) !== '패찰') continue;
+    if (!p?.submittedPrice || !bid.실제낙찰금액 || !bid.실제낙찰률) continue;
+    const 우리제출률 = bid.실제낙찰률 * (p.submittedPrice / bid.실제낙찰금액);
+    gaps.push(우리제출률 - bid.실제낙찰률);
+  }
+  if (gaps.length < 3) return null;
+  return gaps.reduce((a, b) => a + b, 0) / gaps.length;
+}
+
 const PARTICIPATION_FILTERS = ['전체', '참가필요', '참가완료', '패스'] as const;
 type ParticipationFilter = typeof PARTICIPATION_FILTERS[number];
 
@@ -354,6 +385,7 @@ function BidsView({
   const statuses = ['공고중', '낙찰', '유찰'];
   const counts = Object.fromEntries(statuses.map(s => [s, bids.filter(b => b.상태 === s).length]));
   const regions = Array.from(new Set(bids.map(b => b.지역).filter(Boolean))).sort();
+  const bias = computePersonalBias(bids, participations);
   const q = searchQuery.trim().toLowerCase();
   const filtered = bids.filter(b => {
     if (b.상태 !== statusFilter) return false;
@@ -441,7 +473,9 @@ function BidsView({
         <div className="text-center py-16 text-zinc-400 text-sm">해당 상태의 입찰 건이 없습니다</div>
       ) : (
         <div className="flex flex-col gap-3">
-          {filtered.map(bid => (
+          {filtered.map(bid => {
+            const outcome = deriveOutcome(bid, participations[bid.공고번호]);
+            return (
             <div key={bid.id} className="bg-white border border-zinc-100 hover:border-zinc-200 hover:shadow-sm transition-all rounded-xl px-5 py-4">
               <div className="flex items-start gap-3">
                 {/* 상태 뱃지 */}
@@ -453,6 +487,11 @@ function BidsView({
                   participation={participations[bid.공고번호]}
                   onChange={onParticipationChange}
                 />
+                {outcome && (
+                  <span className="shrink-0 mt-0.5 text-[10px] font-bold text-white px-2 py-0.5 rounded-full" style={{ backgroundColor: OUTCOME_COLOR[outcome] }}>
+                    {outcome}
+                  </span>
+                )}
                 {/* 공고명 */}
                 <div className="flex-1 min-w-0">
                   {bid.공고URL ? (
@@ -477,6 +516,13 @@ function BidsView({
                     <span className="text-zinc-400">추천입찰가 </span>
                     <span className="font-semibold text-blue-600">{fmtWon(bid.추천입찰가)}</span>
                     {bid.적용낙찰률 && <span className="text-zinc-400 ml-1">({bid.적용낙찰률})</span>}
+                  </div>
+                )}
+                {bid.추천입찰가 && bias !== null && (
+                  <div>
+                    <span className="text-zinc-400">개인화 </span>
+                    <span className="font-semibold text-indigo-600">{fmtWon(Math.round(bid.추천입찰가 * (1 + bias / 100)))}</span>
+                    <span className="text-zinc-400 ml-1">(근사, {bias >= 0 ? '+' : ''}{bias.toFixed(1)}%p 보정)</span>
                   </div>
                 )}
                 {bid.실제낙찰금액 && (
@@ -513,7 +559,8 @@ function BidsView({
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
