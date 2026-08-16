@@ -262,6 +262,7 @@ function BidParticipationControl({
       </button>
       {open && (
         <div className="absolute left-0 top-6 z-20 bg-white rounded-xl shadow-lg border border-zinc-100 py-2 px-3 min-w-[200px] text-xs">
+          {error && <span className="text-red-500 block mb-1">{error}</span>}
           {!pendingComplete ? (
             <div className="flex flex-col gap-1">
               {BID_PARTICIPATION_STATUSES.map(s => (
@@ -296,7 +297,6 @@ function BidParticipationControl({
                   className="border border-zinc-200 rounded-lg px-2 py-1"
                 />
               </label>
-              {error && <span className="text-red-500">{error}</span>}
               <div className="flex gap-2 mt-1">
                 <button
                   onClick={() => void save('참가완료')}
