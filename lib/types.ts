@@ -32,6 +32,22 @@ export const COMPETITION_STATUS_COLOR: Record<CompetitionStatus, string> = {
   '탈락':    '#ef4444',
 };
 
+export const BID_PARTICIPATION_STATUSES = ['참가예정', '참가완료', '패스'] as const;
+export type BidParticipationStatus = typeof BID_PARTICIPATION_STATUSES[number];
+
+export const BID_PARTICIPATION_STATUS_COLOR: Record<BidParticipationStatus, string> = {
+  '참가예정': '#f97316',
+  '참가완료': '#22c55e',
+  '패스': '#94a3b8',
+};
+
+export interface BidParticipation {
+  bidNo: string;
+  status: BidParticipationStatus;
+  submittedPrice: number | null;
+  submittedDate: string | null;
+}
+
 export interface CompetitionFile {
   name: string;
   url: string;
