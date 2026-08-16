@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Reference, Collection, FilterState, CompetitionStatus, CompetitionData, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, ScheduleItem, LINK_CATEGORIES } from '@/lib/types';
+import { Reference, Collection, FilterState, CompetitionStatus, CompetitionData, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, ScheduleItem, LINK_CATEGORIES, BidParticipation, BidParticipationStatus, BID_PARTICIPATION_STATUSES, BID_PARTICIPATION_STATUS_COLOR } from '@/lib/types';
 import { COLLECTION_COLORS } from '@/lib/tags';
-import { getRefs, getCollections, deleteRef, addCollection, deleteCollection, updateRef, generateId, updateCompetitionStatus, archiveRefNotionSchedules } from '@/lib/store';
+import { getRefs, getCollections, deleteRef, addCollection, deleteCollection, updateRef, generateId, updateCompetitionStatus, archiveRefNotionSchedules, getBidParticipations, upsertBidParticipation } from '@/lib/store';
 import { autoTag } from '@/lib/auto-tag';
 import { generateScheduleTemplate } from '@/lib/schedule-template';
 import ReferenceCard from '@/components/ReferenceCard';
@@ -201,12 +201,144 @@ const BID_STATUS_COLOR: Record<string, string> = {
   '공고중': '#3b82f6', '낙찰': '#22c55e', '유찰': '#94a3b8',
 };
 
-function BidsView({ bids, loaded, statusFilter, onStatusFilter }: {
+const PARTICIPATION_FILTERS = ['전체', '참가필요', '참가완료', '패스'] as const;
+type ParticipationFilter = typeof PARTICIPATION_FILTERS[number];
+
+function BidParticipationControl({
+  bidNo,
+  participation,
+  onChange,
+}: {
+  bidNo: string;
+  participation: BidParticipation | undefined;
+  onChange: (p: BidParticipation) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pendingComplete, setPendingComplete] = useState(false);
+  const [price, setPrice] = useState(participation?.submittedPrice?.toString() ?? '');
+  const [date, setDate] = useState(participation?.submittedDate ?? '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save(status: BidParticipationStatus) {
+    setSaving(true);
+    setError(null);
+    try {
+      await onChange({
+        bidNo,
+        status,
+        submittedPrice: status === '참가완료' ? (Number(price) || null) : null,
+        submittedDate: status === '참가완료' ? (date || null) : null,
+      });
+      setOpen(false);
+      setPendingComplete(false);
+    } catch {
+      setError('저장 실패, 다시 시도해주세요');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function pick(status: BidParticipationStatus) {
+    if (status === '참가완료') {
+      setPendingComplete(true);
+    } else {
+      void save(status);
+    }
+  }
+
+  const badgeLabel = participation?.status ?? '미정';
+  const badgeColor = participation ? BID_PARTICIPATION_STATUS_COLOR[participation.status] : '#d4d4d8';
+
+  return (
+    <div className="relative shrink-0">
+      <button
+        onClick={() => { setOpen(v => !v); setPendingComplete(false); setError(null); }}
+        className="flex items-center gap-1 text-[10px] font-bold text-white px-2 py-0.5 rounded-full whitespace-nowrap"
+        style={{ backgroundColor: badgeColor }}
+      >
+        {badgeLabel}
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-6 z-20 bg-white rounded-xl shadow-lg border border-zinc-100 py-2 px-3 min-w-[200px] text-xs">
+          {!pendingComplete ? (
+            <div className="flex flex-col gap-1">
+              {BID_PARTICIPATION_STATUSES.map(s => (
+                <button
+                  key={s}
+                  onClick={() => pick(s)}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-50 text-left rounded-lg"
+                >
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: BID_PARTICIPATION_STATUS_COLOR[s] }} />
+                  <span className={participation?.status === s ? 'font-bold text-zinc-900' : 'text-zinc-600'}>{s}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <label className="flex flex-col gap-1">
+                <span className="text-zinc-400">제출입찰가</span>
+                <input
+                  type="number"
+                  value={price}
+                  onChange={e => setPrice(e.target.value)}
+                  className="border border-zinc-200 rounded-lg px-2 py-1"
+                  placeholder="예: 21439585"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-zinc-400">제출일</span>
+                <input
+                  type="date"
+                  value={date}
+                  onChange={e => setDate(e.target.value)}
+                  className="border border-zinc-200 rounded-lg px-2 py-1"
+                />
+              </label>
+              {error && <span className="text-red-500">{error}</span>}
+              <div className="flex gap-2 mt-1">
+                <button
+                  onClick={() => void save('참가완료')}
+                  disabled={saving || !price}
+                  className="flex-1 bg-zinc-900 text-white rounded-lg py-1 disabled:opacity-40"
+                >
+                  저장
+                </button>
+                <button
+                  onClick={() => setPendingComplete(false)}
+                  className="flex-1 bg-zinc-100 text-zinc-600 rounded-lg py-1"
+                >
+                  취소
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BidsView({
+  bids, loaded, statusFilter, onStatusFilter,
+  participations, participationFilter, onParticipationFilter, onParticipationChange,
+}: {
   bids: BidItem[]; loaded: boolean; statusFilter: string; onStatusFilter: (s: string) => void;
+  participations: Record<string, BidParticipation | undefined>;
+  participationFilter: ParticipationFilter;
+  onParticipationFilter: (f: ParticipationFilter) => void;
+  onParticipationChange: (p: BidParticipation) => Promise<void>;
 }) {
   const statuses = ['공고중', '낙찰', '유찰'];
   const counts = Object.fromEntries(statuses.map(s => [s, bids.filter(b => b.상태 === s).length]));
-  const filtered = bids.filter(b => b.상태 === statusFilter);
+  const filtered = bids.filter(b => {
+    if (b.상태 !== statusFilter) return false;
+    const pStatus = participations[b.공고번호]?.status ?? '미정';
+    if (participationFilter === '전체') return true;
+    if (participationFilter === '참가필요') return pStatus === '미정' || pStatus === '참가예정';
+    return pStatus === participationFilter;
+  });
 
   if (!loaded) {
     return <div className="flex-1 flex items-center justify-center py-24 text-zinc-400 text-sm">입찰정보 불러오는 중…</div>;
@@ -230,6 +362,18 @@ function BidsView({ bids, loaded, statusFilter, onStatusFilter }: {
         <span className="ml-auto text-xs text-zinc-400 self-center">총 {bids.length}건</span>
       </div>
 
+      <div className="flex gap-2 mb-5">
+        {PARTICIPATION_FILTERS.map(f => (
+          <button
+            key={f}
+            onClick={() => onParticipationFilter(f)}
+            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${participationFilter === f ? 'bg-zinc-900 text-white shadow-sm' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}
+          >
+            {f}
+          </button>
+        ))}
+      </div>
+
       {filtered.length === 0 ? (
         <div className="text-center py-16 text-zinc-400 text-sm">해당 상태의 입찰 건이 없습니다</div>
       ) : (
@@ -241,6 +385,11 @@ function BidsView({ bids, loaded, statusFilter, onStatusFilter }: {
                 <span className="shrink-0 mt-0.5 text-[10px] font-bold text-white px-2 py-0.5 rounded-full" style={{ backgroundColor: BID_STATUS_COLOR[bid.상태] ?? '#94a3b8' }}>
                   {bid.상태}
                 </span>
+                <BidParticipationControl
+                  bidNo={bid.공고번호}
+                  participation={participations[bid.공고번호]}
+                  onChange={onParticipationChange}
+                />
                 {/* 공고명 */}
                 <div className="flex-1 min-w-0">
                   {bid.공고URL ? (
@@ -272,6 +421,15 @@ function BidsView({ bids, loaded, statusFilter, onStatusFilter }: {
                     <span className="text-zinc-400">낙찰금액 </span>
                     <span className="font-semibold text-green-600">{fmtWon(bid.실제낙찰금액)}</span>
                     {bid.실제낙찰률 && <span className="text-zinc-400 ml-1">({bid.실제낙찰률.toFixed(2)}%)</span>}
+                  </div>
+                )}
+                {participations[bid.공고번호]?.status === '참가완료' && (
+                  <div>
+                    <span className="text-zinc-400">제출입찰가 </span>
+                    <span className="font-semibold text-purple-600">{fmtWon(participations[bid.공고번호]!.submittedPrice)}</span>
+                    {participations[bid.공고번호]?.submittedDate && (
+                      <span className="text-zinc-400 ml-1">({participations[bid.공고번호]!.submittedDate} 제출)</span>
+                    )}
                   </div>
                 )}
                 {bid.낙찰업체 && (
@@ -692,6 +850,8 @@ export default function Home() {
   const [bids, setBids] = useState<BidItem[]>([]);
   const [bidsLoaded, setBidsLoaded] = useState(false);
   const [bidStatusFilter, setBidStatusFilter] = useState<string>('공고중');
+  const [participations, setParticipations] = useState<Record<string, BidParticipation | undefined>>({});
+  const [participationFilter, setParticipationFilter] = useState<ParticipationFilter>('전체');
   const [batchTagging, setBatchTagging] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
 
@@ -813,6 +973,11 @@ export default function Home() {
       if (r.status === 'fulfilled' && r.value?.pageId) return { ...item, notionPageId: r.value.pageId as string };
       return item;
     });
+  }
+
+  async function handleParticipationChange(p: BidParticipation) {
+    await upsertBidParticipation(p);
+    setParticipations(prev => ({ ...prev, [p.bidNo]: p }));
   }
 
   async function handleCompetitionStatusChange(id: string, status: CompetitionStatus) {
@@ -1032,8 +1197,12 @@ export default function Home() {
             onClick={() => {
               setTab('bids');
               if (!bidsLoaded) {
-                fetch('/api/bids').then(r => r.json()).then((data: BidItem[]) => {
-                  setBids(data);
+                Promise.all([
+                  fetch('/api/bids').then(r => r.json()) as Promise<BidItem[]>,
+                  getBidParticipations(),
+                ]).then(([bidsData, participationsData]) => {
+                  setBids(bidsData);
+                  setParticipations(Object.fromEntries(participationsData.map(p => [p.bidNo, p])));
                   setBidsLoaded(true);
                 }).catch(() => {});
               }
@@ -1168,7 +1337,16 @@ export default function Home() {
             onAutoFill={handleAutoFill}
           />
         ) : tab === 'bids' ? (
-          <BidsView bids={bids} loaded={bidsLoaded} statusFilter={bidStatusFilter} onStatusFilter={setBidStatusFilter} />
+          <BidsView
+            bids={bids}
+            loaded={bidsLoaded}
+            statusFilter={bidStatusFilter}
+            onStatusFilter={setBidStatusFilter}
+            participations={participations}
+            participationFilter={participationFilter}
+            onParticipationFilter={setParticipationFilter}
+            onParticipationChange={handleParticipationChange}
+          />
         ) : (
           <LinkView
             links={linkRefs}
