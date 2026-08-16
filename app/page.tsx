@@ -321,10 +321,10 @@ function BidParticipationControl({
 }
 
 function BidsView({
-  bids, loaded, statusFilter, onStatusFilter,
+  bids, loaded, error, statusFilter, onStatusFilter,
   participations, participationFilter, onParticipationFilter, onParticipationChange,
 }: {
-  bids: BidItem[]; loaded: boolean; statusFilter: string; onStatusFilter: (s: string) => void;
+  bids: BidItem[]; loaded: boolean; error: boolean; statusFilter: string; onStatusFilter: (s: string) => void;
   participations: Record<string, BidParticipation | undefined>;
   participationFilter: ParticipationFilter;
   onParticipationFilter: (f: ParticipationFilter) => void;
@@ -342,6 +342,10 @@ function BidsView({
 
   if (!loaded) {
     return <div className="flex-1 flex items-center justify-center py-24 text-zinc-400 text-sm">입찰정보 불러오는 중…</div>;
+  }
+
+  if (error) {
+    return <div className="flex-1 flex items-center justify-center py-24 text-red-400 text-sm">입찰정보를 불러오지 못했습니다</div>;
   }
 
   return (
@@ -849,6 +853,7 @@ export default function Home() {
   const syncingIds = useRef<Set<string>>(new Set());
   const [bids, setBids] = useState<BidItem[]>([]);
   const [bidsLoaded, setBidsLoaded] = useState(false);
+  const [bidsError, setBidsError] = useState(false);
   const [bidStatusFilter, setBidStatusFilter] = useState<string>('공고중');
   const [participations, setParticipations] = useState<Record<string, BidParticipation | undefined>>({});
   const [participationFilter, setParticipationFilter] = useState<ParticipationFilter>('전체');
@@ -1197,14 +1202,34 @@ export default function Home() {
             onClick={() => {
               setTab('bids');
               if (!bidsLoaded) {
-                Promise.all([
-                  fetch('/api/bids').then(r => r.json()) as Promise<BidItem[]>,
-                  getBidParticipations(),
-                ]).then(([bidsData, participationsData]) => {
-                  setBids(bidsData);
-                  setParticipations(Object.fromEntries(participationsData.map(p => [p.bidNo, p])));
-                  setBidsLoaded(true);
-                }).catch(() => {});
+                // Bids (Notion feed) and participations (Supabase) are independent
+                // data sources — a failure in one must not block the other.
+                fetch('/api/bids')
+                  .then(r => r.json())
+                  .then((data: BidItem[] | { error: string }) => {
+                    if (Array.isArray(data)) {
+                      setBids(data);
+                      setBidsError(false);
+                    } else {
+                      setBids([]);
+                      setBidsError(true);
+                    }
+                    setBidsLoaded(true);
+                  })
+                  .catch(() => {
+                    setBids([]);
+                    setBidsError(true);
+                    setBidsLoaded(true);
+                  });
+                getBidParticipations()
+                  .then(participationsData => {
+                    setParticipations(Object.fromEntries(participationsData.map(p => [p.bidNo, p])));
+                  })
+                  .catch(() => {
+                    // Degrade gracefully: treat every bid as 미정 rather than
+                    // letting a Supabase hiccup block the bid list.
+                    setParticipations({});
+                  });
               }
             }}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${tab === 'bids' ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-400 hover:text-zinc-700'}`}
@@ -1340,6 +1365,7 @@ export default function Home() {
           <BidsView
             bids={bids}
             loaded={bidsLoaded}
+            error={bidsError}
             statusFilter={bidStatusFilter}
             onStatusFilter={setBidStatusFilter}
             participations={participations}
