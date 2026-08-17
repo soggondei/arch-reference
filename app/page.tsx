@@ -1152,7 +1152,8 @@ export default function Home() {
       .then(r => r.json())
       .then((data: BidItem[] | { error: string }) => {
         if (Array.isArray(data)) {
-          setBids(data);
+          // 설계공모는 별도 "공모전" 탭에서 관리 — 입찰 목록(입찰정보/창원시)에서는 제외
+          setBids(data.filter(b => !b.공고명.includes('공모')));
           setBidsError(false);
         } else {
           setBids([]);
