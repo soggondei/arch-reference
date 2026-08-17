@@ -215,6 +215,10 @@ function classifyAgency(공고기관: string): AgencyType {
   return '기타';
 }
 
+function classifyChangwon(bid: BidItem): boolean {
+  return bid.공고명.includes('창원') || bid.공고기관.includes('창원');
+}
+
 type Outcome = '낙찰' | '패찰' | '결과대기';
 
 const OUTCOME_COLOR: Record<Outcome, string> = {
@@ -361,6 +365,47 @@ function BidParticipationControl({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function ChangwonView(props: {
+  bids: BidItem[]; loaded: boolean; error: boolean; statusFilter: string; onStatusFilter: (s: string) => void;
+  participations: Record<string, BidParticipation | undefined>;
+  participationFilter: ParticipationFilter;
+  onParticipationFilter: (f: ParticipationFilter) => void;
+  onParticipationChange: (p: BidParticipation) => Promise<void>;
+  searchQuery: string;
+  onSearchQuery: (q: string) => void;
+  regionFilter: string;
+  onRegionFilter: (r: string) => void;
+  agencyTypeFilter: AgencyType | '전체';
+  onAgencyTypeFilter: (a: AgencyType | '전체') => void;
+}) {
+  const changwonBids = props.bids.filter(classifyChangwon);
+
+  let 참가완료 = 0, 낙찰 = 0, 패찰 = 0, 결과대기 = 0;
+  changwonBids.forEach(bid => {
+    const p = props.participations[bid.공고번호];
+    if (p?.status === '참가완료') {
+      참가완료++;
+      const outcome = deriveOutcome(bid, p);
+      if (outcome === '낙찰') 낙찰++;
+      else if (outcome === '패찰') 패찰++;
+      else if (outcome === '결과대기') 결과대기++;
+    }
+  });
+
+  return (
+    <div className="flex-1 min-w-0">
+      {props.loaded && !props.error && (
+        <div className="mb-4 text-sm text-zinc-600 bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-3">
+          전체 <span className="font-semibold text-zinc-900">{changwonBids.length}건</span>
+          {' · '}참가완료 <span className="font-semibold text-zinc-900">{참가완료}건</span>
+          {' '}(낙찰 {낙찰} · 패찰 {패찰} · 결과대기 {결과대기})
+        </div>
+      )}
+      <BidsView {...props} bids={changwonBids} />
     </div>
   );
 }
@@ -951,7 +996,7 @@ export default function Home() {
   const [showUpload, setShowUpload] = useState(false);
   const [prefill, setPrefill] = useState<Record<string, string> | null>(null);
   const [editingRef, setEditingRef] = useState<Reference | null>(null);
-  const [tab, setTab] = useState<'refs' | 'competitions' | 'bids' | 'links'>('refs');
+  const [tab, setTab] = useState<'refs' | 'competitions' | 'bids' | 'changwon' | 'links'>('refs');
   const [showLinkForm, setShowLinkForm] = useState(false);
   const [editingLink, setEditingLink] = useState<Reference | null>(null);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
@@ -966,6 +1011,11 @@ export default function Home() {
   const [bidSearchQuery, setBidSearchQuery] = useState('');
   const [bidRegionFilter, setBidRegionFilter] = useState('전체');
   const [bidAgencyTypeFilter, setBidAgencyTypeFilter] = useState<AgencyType | '전체'>('전체');
+  const [changwonStatusFilter, setChangwonStatusFilter] = useState<string>('공고중');
+  const [changwonParticipationFilter, setChangwonParticipationFilter] = useState<ParticipationFilter>('전체');
+  const [changwonSearchQuery, setChangwonSearchQuery] = useState('');
+  const [changwonRegionFilter, setChangwonRegionFilter] = useState('전체');
+  const [changwonAgencyTypeFilter, setChangwonAgencyTypeFilter] = useState<AgencyType | '전체'>('전체');
   const [batchTagging, setBatchTagging] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
 
@@ -1092,6 +1142,38 @@ export default function Home() {
   async function handleParticipationChange(p: BidParticipation) {
     await upsertBidParticipation(p);
     setParticipations(prev => ({ ...prev, [p.bidNo]: p }));
+  }
+
+  function loadBidsIfNeeded() {
+    if (bidsLoaded) return;
+    // Bids (Notion feed) and participations (Supabase) are independent
+    // data sources — a failure in one must not block the other.
+    fetch('/api/bids')
+      .then(r => r.json())
+      .then((data: BidItem[] | { error: string }) => {
+        if (Array.isArray(data)) {
+          setBids(data);
+          setBidsError(false);
+        } else {
+          setBids([]);
+          setBidsError(true);
+        }
+        setBidsLoaded(true);
+      })
+      .catch(() => {
+        setBids([]);
+        setBidsError(true);
+        setBidsLoaded(true);
+      });
+    getBidParticipations()
+      .then(participationsData => {
+        setParticipations(Object.fromEntries(participationsData.map(p => [p.bidNo, p])));
+      })
+      .catch(() => {
+        // Degrade gracefully: treat every bid as 미정 rather than
+        // letting a Supabase hiccup block the bid list.
+        setParticipations({});
+      });
   }
 
   async function handleCompetitionStatusChange(id: string, status: CompetitionStatus) {
@@ -1308,42 +1390,16 @@ export default function Home() {
             공모전 {competitionRefs.length > 0 && <span className="ml-1 text-xs text-zinc-400">{competitionRefs.length}</span>}
           </button>
           <button
-            onClick={() => {
-              setTab('bids');
-              if (!bidsLoaded) {
-                // Bids (Notion feed) and participations (Supabase) are independent
-                // data sources — a failure in one must not block the other.
-                fetch('/api/bids')
-                  .then(r => r.json())
-                  .then((data: BidItem[] | { error: string }) => {
-                    if (Array.isArray(data)) {
-                      setBids(data);
-                      setBidsError(false);
-                    } else {
-                      setBids([]);
-                      setBidsError(true);
-                    }
-                    setBidsLoaded(true);
-                  })
-                  .catch(() => {
-                    setBids([]);
-                    setBidsError(true);
-                    setBidsLoaded(true);
-                  });
-                getBidParticipations()
-                  .then(participationsData => {
-                    setParticipations(Object.fromEntries(participationsData.map(p => [p.bidNo, p])));
-                  })
-                  .catch(() => {
-                    // Degrade gracefully: treat every bid as 미정 rather than
-                    // letting a Supabase hiccup block the bid list.
-                    setParticipations({});
-                  });
-              }
-            }}
+            onClick={() => { setTab('bids'); loadBidsIfNeeded(); }}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${tab === 'bids' ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-400 hover:text-zinc-700'}`}
           >
             입찰정보
+          </button>
+          <button
+            onClick={() => { setTab('changwon'); loadBidsIfNeeded(); }}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${tab === 'changwon' ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-400 hover:text-zinc-700'}`}
+          >
+            창원시
           </button>
           <button
             onClick={() => setTab('links')}
@@ -1487,6 +1543,24 @@ export default function Home() {
             onRegionFilter={setBidRegionFilter}
             agencyTypeFilter={bidAgencyTypeFilter}
             onAgencyTypeFilter={setBidAgencyTypeFilter}
+          />
+        ) : tab === 'changwon' ? (
+          <ChangwonView
+            bids={bids}
+            loaded={bidsLoaded}
+            error={bidsError}
+            statusFilter={changwonStatusFilter}
+            onStatusFilter={setChangwonStatusFilter}
+            participations={participations}
+            participationFilter={changwonParticipationFilter}
+            onParticipationFilter={setChangwonParticipationFilter}
+            onParticipationChange={handleParticipationChange}
+            searchQuery={changwonSearchQuery}
+            onSearchQuery={setChangwonSearchQuery}
+            regionFilter={changwonRegionFilter}
+            onRegionFilter={setChangwonRegionFilter}
+            agencyTypeFilter={changwonAgencyTypeFilter}
+            onAgencyTypeFilter={setChangwonAgencyTypeFilter}
           />
         ) : (
           <LinkView
