@@ -214,7 +214,9 @@ function classifyAgency(공고기관: string): AgencyType {
 }
 
 function classifyChangwon(bid: BidItem): boolean {
-  return bid.공고명.includes('창원') || bid.공고기관.includes('창원');
+  // 2010년 마산·창원·진해 통합 — 마산은 대개 "창원교육지원청" 등으로 표기돼 이미 걸리지만,
+  // 진해는 자체 기관명(예: "경상남도교육청 진해중앙고등학교")에 "창원"이 없어 따로 확인해야 한다.
+  return /창원|마산|진해/.test(bid.공고명) || /창원|마산|진해/.test(bid.공고기관);
 }
 
 type Outcome = '낙찰' | '패찰' | '결과대기';
