@@ -192,9 +192,7 @@ interface BidItem {
 
 function fmtWon(n: number | null): string {
   if (!n) return '-';
-  if (n >= 100000000) return `${(n / 100000000).toFixed(1)}억`;
-  if (n >= 10000) return `${Math.round(n / 10000).toLocaleString()}만`;
-  return n.toLocaleString();
+  return `${n.toLocaleString()}원`;
 }
 
 const BID_STATUS_COLOR: Record<string, string> = {
