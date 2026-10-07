@@ -134,6 +134,28 @@ const SCORER_CATEGORY: Record<string, string> = {
   '종교': '종교', '산업': '산업',
 };
 
+// "2026-11-26 ~ 2026-11-27 (18:00)" 또는 "~ 2026-10-14 (18:00)"처럼 범위/단일이
+// 섞여 있어, 문자열에 등장하는 마지막 YYYY-MM-DD(= 마감일)를 뽑는다.
+function lastDate(s: string): string {
+  const all = s.match(/\d{4}-\d{2}-\d{2}/g);
+  return all && all.length ? all[all.length - 1] : '';
+}
+
+// scorer.co.kr이 2026-10월 개편 때 OG description의 (상태) 표기를 없앴다.
+// 상태 정보가 페이지 어디에도 배지로 남아있지 않아, 날짜로 계산한다.
+// 기준(사용자 결정): 작품접수 마감일.
+//   오늘 < 공고일            → 예정
+//   오늘 <= 작품접수 마감일  → 진행 (아직 접수 가능)
+//   오늘 >  작품접수 마감일  → 완료
+// 작품접수일이 없으면 심사일 → 공고일 순으로 폴백한다.
+function computeStatus(announcementDate: string, submissionDate: string, judgeDate: string): string {
+  const today = new Date().toISOString().slice(0, 10);
+  const deadline = lastDate(submissionDate) || lastDate(judgeDate);
+  if (announcementDate && today < announcementDate) return '예정';
+  if (!deadline) return announcementDate && today >= announcementDate ? '진행' : '예정';
+  return today <= deadline ? '진행' : '완료';
+}
+
 async function fetchItem(entry: SitemapEntry): Promise<ScorerImportItem | null> {
   const url = `https://scorer.co.kr/competition/${entry.id}`;
   try {
@@ -162,22 +184,19 @@ async function fetchItem(entry: SitemapEntry): Promise<ScorerImportItem | null> 
     // 공모요강 상세 필드 파싱
     const fields = parseDtDd(html);
 
-    // 발주처: OG desc 또는 fields에서
-    const clientM = ogDesc.match(/발주처\s*:\s*([^,]+)/);
+    // 발주처: OG desc에서 (2026-10 개편으로 "발주처 : " → "발주처 " 콜론이 빠짐)
+    const clientM = ogDesc.match(/발주처\s*:?\s*([^,]+)/);
     const architect = clientM ? clientM[1].trim() : '';
 
     // 연도: 공고일에서
     const announcementDate = fields.get('공고일') || '';
     const year = announcementDate.slice(0, 4) || entry.lastmod.slice(0, 4);
 
-    // 상태: OG desc 앞부분
-    const statusM = ogDesc.match(/^\(([^)]+)\)/);
-    const status = statusM ? statusM[1] : '완료';
+    // 상태: OG desc의 (상태) 표기가 개편으로 사라져 날짜로 계산 (작품접수 마감일 기준)
+    const status = computeStatus(announcementDate, fields.get('작품접수일') || '', fields.get('심사일') || '');
 
-    // 카테고리: OG desc 두 번째 토큰
-    const headerPart = ogDesc.replace(/^\([^)]*\)\s*/, '');
-    const tokens = headerPart.split(',').map(s => s.trim());
-    const rawCat = tokens[1] || fields.get('카테고리')?.split('/')[0].trim() || '';
+    // 카테고리: 개편으로 OG desc 토큰 구조가 바뀌어(2번째가 이제 발주처) dt/dd 필드를 신뢰
+    const rawCat = fields.get('카테고리')?.split('/')[0].trim() || '';
     const category = SCORER_CATEGORY[rawCat] || rawCat;
 
     // 연면적 숫자 파싱 (autoTag scale 결정용)
