@@ -28,3 +28,13 @@ test('두 번째 페이지 실패 시 부분 목록을 성공으로 내보내지
 test('조회 타임아웃은 504로 전달',async()=>{
   await assert.rejects(loadBidFeed('test','db',async()=>{throw new DOMException('test','TimeoutError')}),error=>error.status===504);
 });
+
+test('저장된 공고중 상태는 한국시간 실제 마감으로 보정하고 낙찰·유찰은 유지',()=>{
+  const p=page('A');p.properties.상태={select:{name:'공고중'}};p.properties.마감일={date:{start:'2026-10-18'}};
+  assert.equal(mapBidPage(p,Date.parse('2026-10-18T20:00:00+09:00')).상태,'공고중');
+  assert.equal(mapBidPage(p,Date.parse('2026-10-19T00:00:00+09:00')).상태,'마감');
+  p.properties.마감일.date.start='2026-10-18T10:00:00+09:00';
+  assert.equal(mapBidPage(p,Date.parse('2026-10-18T10:01:00+09:00')).상태,'마감');
+  for(const state of ['낙찰','유찰']){p.properties.상태.select.name=state;assert.equal(mapBidPage(p).상태,state);}
+  p.properties.상태.select.name='공고중';p.properties.마감일.date.start='';assert.equal(mapBidPage(p).상태,'공고중');
+});

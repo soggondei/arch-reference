@@ -12,7 +12,7 @@ function text(prop: Property | undefined, key: string): string {
   return parts.map(p => p?.plain_text ?? p?.text?.content ?? '').join('');
 }
 
-export function mapBidPage(page: Page) {
+export function mapBidPage(page: Page, now = Date.now()) {
   const props = page.properties;
   const result: Record<string, string | number | null> = { id: page.id };
   result.공고명 = text(props['공고명'], 'title');
@@ -23,6 +23,11 @@ export function mapBidPage(page: Page) {
     result[name] = typeof value === 'number' && Number.isFinite(value) ? value : null;
   }
   for (const name of ['공고일', '마감일', '개찰일']) result[name] = (props[name]?.date as { start?: string } | null)?.start ?? '';
+  // 2026-10-18: 과거 저장 상태가 공고중이어도 실제 마감시각이 지났으면 마감으로 표시한다.
+  // 시각 없는 기존 날짜는 한국시간 해당일 종료까지 유지하고 낙찰·유찰 상태는 보존한다.
+  const closing = String(result.마감일 || '');
+  const deadline = Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(closing) ? closing + 'T23:59:59.999+09:00' : closing);
+  if (result.상태 === '공고중' && Number.isFinite(deadline) && deadline < now) result.상태 = '마감';
   result.공고URL = typeof props['공고URL']?.url === 'string' ? props['공고URL'].url : '';
   return result;
 }

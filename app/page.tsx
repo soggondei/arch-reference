@@ -401,7 +401,7 @@ function ChangwonView(props: {
     <div className="flex-1 min-w-0">
       {props.loaded && !props.error && (
         <div className="mb-4 text-sm text-zinc-600 bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-3">
-          전체 <span className="font-semibold text-zinc-900">{changwonBids.length}건</span>
+          창원·마산·진해 관련 공고 <span className="font-semibold text-zinc-900">{changwonBids.length}건</span>
           {' · '}참가완료 <span className="font-semibold text-zinc-900">{참가완료}건</span>
           {' '}(낙찰 {낙찰} · 패찰 {패찰} · 결과대기 {결과대기})
         </div>
@@ -455,7 +455,7 @@ function BidsView({
   return (
     <div className="flex-1 min-w-0">
       <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-zinc-500"><span>최신 공고일: {bids.map(b => b.공고일).filter(Boolean).sort().at(-1)?.slice(0, 10) || '없음'}</span><button onClick={onReload} className="ml-auto rounded-lg border px-3 py-2">새로고침</button></div>
-      <p className="mb-3 text-xs text-zinc-500">발주지역과 참가가능지역은 다를 수 있습니다. 면허·실적·공동수급 조건은 공고 원문에서 확인하세요.</p>
+      <p className="mb-3 text-xs text-zinc-500">발주지역과 참가가능지역은 다를 수 있습니다. 설계공모도 포함하며, 참가등록 마감·면허·실적·공동수급 조건은 공고 원문에서 확인하세요.</p>
       {/* 검색 + 지역 */}
       <div className="flex gap-2 mb-3">
         <input
@@ -601,7 +601,7 @@ function BidsView({
               {/* 날짜 + 방법 */}
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-zinc-400">
                 {bid.공고일 && <span>공고 {bid.공고일}</span>}
-                {bid.마감일 && <span>마감 {bid.마감일}</span>}
+                {bid.마감일 ? <span>마감 {bid.마감일}</span> : <span>마감·참가등록 일정 원문 확인</span>}
                 {bid.개찰일 && <span>개찰 {bid.개찰일}</span>}
                 {(bid.입찰방법 || bid.예가방법) && (
                   <span className="ml-auto">{[bid.입찰방법, bid.예가방법].filter(Boolean).join(' · ')}</span>
@@ -1158,7 +1158,8 @@ export default function Home() {
       .then(async response => {
         const data = await response.json();
         if (!response.ok || !Array.isArray(data)) throw new Error(data?.error || '입찰정보를 불러오지 못했습니다.');
-        setBids(data.filter((b: BidItem) => !b.공고명.includes('공모')));
+        // 2026-10-18: 별도 공모전 탭 등록 여부와 무관하게 나라장터 수집 공모도 보존한다.
+        setBids(data);
       })
       .catch(error => setBidsError(error?.name === 'TimeoutError' ? '조회 시간이 초과됐습니다. 다시 시도해 주세요.' : error instanceof Error ? error.message : '입찰정보를 불러오지 못했습니다.'))
       .finally(() => { bidsLoading.current = false; setBidsLoaded(true); });
