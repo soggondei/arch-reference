@@ -16,18 +16,26 @@ export function mapBidPage(page: Page, now = Date.now()) {
   const props = page.properties;
   const result: Record<string, string | number | null> = { id: page.id };
   result.공고명 = text(props['공고명'], 'title');
-  for (const name of ['공고기관', '공고번호', '적용낙찰률', '낙찰업체', '참가가능지역', '면허조건', '참가검토']) result[name] = text(props[name], 'rich_text');
+  for (const name of ['공고기관', '공고번호', '적용낙찰률', '낙찰업체', '참가가능지역', '면허조건', '참가검토', '공고차수', '가격모델', '추천상태', '추천근거', '가격자료출처', '가격기준시점', '가격비교범위']) result[name] = text(props[name], 'rich_text');
   for (const name of ['지역', '상태', '입찰방법', '예가방법']) result[name] = (props[name]?.select as { name?: string } | null)?.name ?? '';
-  for (const name of ['배정예산', '추천입찰가', '낙찰하한가', '실제낙찰금액', '실제낙찰률']) {
+  for (const name of ['배정예산', '추천입찰가', '낙찰하한가', '실제낙찰금액', '실제낙찰률', '기초금액', '가격사례수']) {
     const value = props[name]?.number;
     result[name] = typeof value === 'number' && Number.isFinite(value) ? value : null;
   }
-  for (const name of ['공고일', '마감일', '개찰일']) result[name] = (props[name]?.date as { start?: string } | null)?.start ?? '';
+  for (const name of ['공고일', '마감일', '개찰일', '추천갱신일']) result[name] = (props[name]?.date as { start?: string } | null)?.start ?? '';
   // 2026-10-18: 과거 저장 상태가 공고중이어도 실제 마감시각이 지났으면 마감으로 표시한다.
   // 시각 없는 기존 날짜는 한국시간 해당일 종료까지 유지하고 낙찰·유찰 상태는 보존한다.
   const closing = String(result.마감일 || '');
   const deadline = Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(closing) ? closing + 'T23:59:59.999+09:00' : closing);
   if (result.상태 === '공고중' && Number.isFinite(deadline) && deadline < now) result.상태 = '마감';
+  // 모델·상태·사례수가 맞지 않으면 과거 숫자를 새 추천처럼 표시하지 않는다.
+  const validPrice = result.가격모델 === 'basis-final-v1' && result.추천상태 === '사례기반 참고' &&
+    Number(result.가격사례수) >= 10 && Number(result.추천입찰가) > 0;
+  if (!validPrice) {
+    result.추천입찰가 = null; result.낙찰하한가 = null; result.적용낙찰률 = '';
+    result.추천상태 = '추천 보류';
+    result.추천근거 = result.추천근거 || '새 기준의 가격 근거 확인 필요';
+  }
   result.공고URL = typeof props['공고URL']?.url === 'string' ? props['공고URL'].url : '';
   return result;
 }

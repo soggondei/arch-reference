@@ -187,6 +187,8 @@ interface BidItem {
   지역: string; 상태: string; 입찰방법: string; 예가방법: string;
   배정예산: number | null; 추천입찰가: number | null; 낙찰하한가: number | null;
   적용낙찰률: string; 실제낙찰금액: number | null; 실제낙찰률: number | null;
+  가격모델?: string; 추천상태?: string; 추천근거?: string; 가격자료출처?: string; 가격기준시점?: string; 가격비교범위?: string;
+  기초금액?: number | null; 가격사례수?: number | null; 추천갱신일?: string;
   참가가능지역?: string; 면허조건?: string; 참가검토?: string;
   낙찰업체: string; 공고일: string; 마감일: string; 개찰일: string; 공고URL: string;
 }
@@ -235,20 +237,6 @@ function deriveOutcome(bid: BidItem, p: BidParticipation | undefined): Outcome |
   if (p?.status !== '참가완료') return null;
   if (!bid.낙찰업체) return '결과대기';
   return bid.낙찰업체.trim() === OUR_COMPANY_NAME ? '낙찰' : '패찰';
-}
-
-// 패찰 건들의 "우리 제출률 - 실제낙찰률" 평균 (%p). 표본 3건 미만이면 null.
-function computePersonalBias(bids: BidItem[], participations: Record<string, BidParticipation | undefined>): number | null {
-  const gaps: number[] = [];
-  for (const bid of bids) {
-    const p = participations[bid.공고번호];
-    if (deriveOutcome(bid, p) !== '패찰') continue;
-    if (!p?.submittedPrice || !bid.실제낙찰금액 || !bid.실제낙찰률) continue;
-    const 우리제출률 = bid.실제낙찰률 * (p.submittedPrice / bid.실제낙찰금액);
-    gaps.push(우리제출률 - bid.실제낙찰률);
-  }
-  if (gaps.length < 3) return null;
-  return gaps.reduce((a, b) => a + b, 0) / gaps.length;
 }
 
 const PARTICIPATION_FILTERS = ['전체', '참가필요', '참가완료', '패스'] as const;
@@ -431,7 +419,6 @@ function BidsView({
   const statuses = ['전체', '공고중', '마감', '낙찰', '유찰'];
   const counts = Object.fromEntries(statuses.map(s => [s, bids.filter(b => s === '전체' || b.상태 === s).length]));
   const regions = Array.from(new Set(bids.map(b => b.지역).filter(Boolean))).sort();
-  const bias = computePersonalBias(bids, participations);
   const q = searchQuery.trim().toLowerCase();
   const filtered = bids.filter(b => {
     if (statusFilter !== '전체' && b.상태 !== statusFilter) return false;
@@ -560,20 +547,18 @@ function BidsView({
                   <span className="font-semibold text-zinc-800">{fmtWon(bid.배정예산)}</span>
                 </div>
                 <div className="col-span-full text-xs text-zinc-500"><p>{bid.참가검토 || '참가자격 확인 필요 · 기존 수집 자료'}</p>{bid.참가가능지역 && <p>참가가능지역: {bid.참가가능지역}</p>}{bid.면허조건 && <p>면허조건: {bid.면허조건}</p>}</div>
-                {bid.추천입찰가 && (
-                  <div>
-                    <span className="text-zinc-400">추천입찰가 </span>
-                    <span className="font-semibold text-blue-600">{fmtWon(bid.추천입찰가)}</span>
-                    {bid.적용낙찰률 && <span className="text-zinc-400 ml-1">({bid.적용낙찰률})</span>}
-                  </div>
-                )}
-                {bid.추천입찰가 && bias !== null && (
-                  <div>
-                    <span className="text-zinc-400">개인화 </span>
-                    <span className="font-semibold text-indigo-600">{fmtWon(Math.round(bid.추천입찰가 * (1 + bias / 100)))}</span>
-                    <span className="text-zinc-400 ml-1">(근사, {bias >= 0 ? '+' : ''}{bias.toFixed(1)}%p 보정)</span>
-                  </div>
-                )}
+                <div className="w-full rounded-lg bg-slate-50 p-3 space-y-1.5">
+                  {bid.추천입찰가 ? (
+                    <p><span className="text-zinc-500">사례 기반 참고가 </span><span className="font-semibold text-blue-700">{fmtWon(bid.추천입찰가)}</span></p>
+                  ) : (
+                    <p className="font-semibold text-amber-700">추천 보류</p>
+                  )}
+                  <p className="text-zinc-600">{bid.추천근거 || '가격 근거 확인 필요'}</p>
+                  {!!bid.기초금액 && <p className="text-zinc-500">기초금액 {fmtWon(bid.기초금액)}{bid.적용낙찰률 && ` · ${bid.적용낙찰률}`}</p>}
+                  {bid.추천입찰가 && <p className="text-zinc-500">비교 사례 {bid.가격사례수}건 · {bid.가격비교범위}<br />예정가격은 개찰 전 미정이며, 이 금액이 하한 충족이나 낙찰을 보장하지 않습니다.</p>}
+                  {bid.가격자료출처?.startsWith('https://www.g2b.go.kr/') && <a className="text-blue-600 underline" href={bid.가격자료출처} target="_blank" rel="noreferrer">기초금액 확인 원문</a>}
+                  {bid.가격기준시점 && <p className="text-[11px] text-zinc-400">자료 기준 {bid.가격기준시점.slice(0, 10)} · 갱신 {bid.추천갱신일?.slice(0, 10) || '-'}</p>}
+                </div>
                 {bid.실제낙찰금액 && (
                   <div>
                     <span className="text-zinc-400">낙찰금액 </span>
