@@ -187,6 +187,7 @@ interface BidItem {
   지역: string; 상태: string; 입찰방법: string; 예가방법: string;
   배정예산: number | null; 추천입찰가: number | null; 낙찰하한가: number | null;
   적용낙찰률: string; 실제낙찰금액: number | null; 실제낙찰률: number | null;
+  참가가능지역?: string; 면허조건?: string; 참가검토?: string;
   낙찰업체: string; 공고일: string; 마감일: string; 개찰일: string; 공고URL: string;
 }
 
@@ -370,7 +371,7 @@ function BidParticipationControl({
 }
 
 function ChangwonView(props: {
-  bids: BidItem[]; loaded: boolean; error: boolean; statusFilter: string; onStatusFilter: (s: string) => void;
+  bids: BidItem[]; loaded: boolean; error: string; onReload: () => void; statusFilter: string; onStatusFilter: (s: string) => void;
   participations: Record<string, BidParticipation | undefined>;
   participationFilter: ParticipationFilter;
   onParticipationFilter: (f: ParticipationFilter) => void;
@@ -411,11 +412,11 @@ function ChangwonView(props: {
 }
 
 function BidsView({
-  bids, loaded, error, statusFilter, onStatusFilter,
+  bids, loaded, error, onReload, statusFilter, onStatusFilter,
   participations, participationFilter, onParticipationFilter, onParticipationChange,
   searchQuery, onSearchQuery, regionFilter, onRegionFilter, agencyTypeFilter, onAgencyTypeFilter,
 }: {
-  bids: BidItem[]; loaded: boolean; error: boolean; statusFilter: string; onStatusFilter: (s: string) => void;
+  bids: BidItem[]; loaded: boolean; error: string; onReload: () => void; statusFilter: string; onStatusFilter: (s: string) => void;
   participations: Record<string, BidParticipation | undefined>;
   participationFilter: ParticipationFilter;
   onParticipationFilter: (f: ParticipationFilter) => void;
@@ -427,13 +428,13 @@ function BidsView({
   agencyTypeFilter: AgencyType | '전체';
   onAgencyTypeFilter: (a: AgencyType | '전체') => void;
 }) {
-  const statuses = ['공고중', '낙찰', '유찰'];
-  const counts = Object.fromEntries(statuses.map(s => [s, bids.filter(b => b.상태 === s).length]));
+  const statuses = ['전체', '공고중', '마감', '낙찰', '유찰'];
+  const counts = Object.fromEntries(statuses.map(s => [s, bids.filter(b => s === '전체' || b.상태 === s).length]));
   const regions = Array.from(new Set(bids.map(b => b.지역).filter(Boolean))).sort();
   const bias = computePersonalBias(bids, participations);
   const q = searchQuery.trim().toLowerCase();
   const filtered = bids.filter(b => {
-    if (b.상태 !== statusFilter) return false;
+    if (statusFilter !== '전체' && b.상태 !== statusFilter) return false;
     const pStatus = participations[b.공고번호]?.status ?? '미정';
     if (participationFilter === '참가필요' && !(pStatus === '미정' || pStatus === '참가예정')) return false;
     if (participationFilter !== '전체' && participationFilter !== '참가필요' && pStatus !== participationFilter) return false;
@@ -448,11 +449,13 @@ function BidsView({
   }
 
   if (error) {
-    return <div className="flex-1 flex items-center justify-center py-24 text-red-400 text-sm">입찰정보를 불러오지 못했습니다</div>;
+    return <div role="alert" className="py-24 text-center text-sm"><p className="text-red-500">{error}</p><button onClick={onReload} className="mt-4 rounded-lg border px-4 py-2">다시 불러오기</button></div>;
   }
 
   return (
     <div className="flex-1 min-w-0">
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-zinc-500"><span>최신 공고일: {bids.map(b => b.공고일).filter(Boolean).sort().at(-1)?.slice(0, 10) || '없음'}</span><button onClick={onReload} className="ml-auto rounded-lg border px-3 py-2">새로고침</button></div>
+      <p className="mb-3 text-xs text-zinc-500">발주지역과 참가가능지역은 다를 수 있습니다. 면허·실적·공동수급 조건은 공고 원문에서 확인하세요.</p>
       {/* 검색 + 지역 */}
       <div className="flex gap-2 mb-3">
         <input
@@ -556,6 +559,7 @@ function BidsView({
                   <span className="text-zinc-400">배정예산 </span>
                   <span className="font-semibold text-zinc-800">{fmtWon(bid.배정예산)}</span>
                 </div>
+                <div className="col-span-full text-xs text-zinc-500"><p>{bid.참가검토 || '참가자격 확인 필요 · 기존 수집 자료'}</p>{bid.참가가능지역 && <p>참가가능지역: {bid.참가가능지역}</p>}{bid.면허조건 && <p>면허조건: {bid.면허조건}</p>}</div>
                 {bid.추천입찰가 && (
                   <div>
                     <span className="text-zinc-400">추천입찰가 </span>
@@ -1004,7 +1008,8 @@ export default function Home() {
   const syncingIds = useRef<Set<string>>(new Set());
   const [bids, setBids] = useState<BidItem[]>([]);
   const [bidsLoaded, setBidsLoaded] = useState(false);
-  const [bidsError, setBidsError] = useState(false);
+  const [bidsError, setBidsError] = useState('');
+  const bidsLoading = useRef(false);
   const [bidStatusFilter, setBidStatusFilter] = useState<string>('공고중');
   const [participations, setParticipations] = useState<Record<string, BidParticipation | undefined>>({});
   const [participationFilter, setParticipationFilter] = useState<ParticipationFilter>('전체');
@@ -1144,37 +1149,22 @@ export default function Home() {
     setParticipations(prev => ({ ...prev, [p.bidNo]: p }));
   }
 
-  function loadBidsIfNeeded() {
-    if (bidsLoaded) return;
-    // Bids (Notion feed) and participations (Supabase) are independent
-    // data sources — a failure in one must not block the other.
-    fetch('/api/bids')
-      .then(r => r.json())
-      .then((data: BidItem[] | { error: string }) => {
-        if (Array.isArray(data)) {
-          // 설계공모는 별도 "공모전" 탭에서 관리 — 입찰 목록(입찰정보/창원시)에서는 제외
-          setBids(data.filter(b => !b.공고명.includes('공모')));
-          setBidsError(false);
-        } else {
-          setBids([]);
-          setBidsError(true);
-        }
-        setBidsLoaded(true);
+  function loadBidsIfNeeded(force = false) {
+    if (bidsLoading.current || (bidsLoaded && !bidsError && !force)) return;
+    bidsLoading.current = true;
+    setBidsLoaded(false);
+    setBidsError('');
+    fetch('/api/bids', { cache: 'no-store', signal: AbortSignal.timeout(60000) })
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data)) throw new Error(data?.error || '입찰정보를 불러오지 못했습니다.');
+        setBids(data.filter((b: BidItem) => !b.공고명.includes('공모')));
       })
-      .catch(() => {
-        setBids([]);
-        setBidsError(true);
-        setBidsLoaded(true);
-      });
+      .catch(error => setBidsError(error?.name === 'TimeoutError' ? '조회 시간이 초과됐습니다. 다시 시도해 주세요.' : error instanceof Error ? error.message : '입찰정보를 불러오지 못했습니다.'))
+      .finally(() => { bidsLoading.current = false; setBidsLoaded(true); });
     getBidParticipations()
-      .then(participationsData => {
-        setParticipations(Object.fromEntries(participationsData.map(p => [p.bidNo, p])));
-      })
-      .catch(() => {
-        // Degrade gracefully: treat every bid as 미정 rather than
-        // letting a Supabase hiccup block the bid list.
-        setParticipations({});
-      });
+      .then(data => setParticipations(Object.fromEntries(data.map(p => [p.bidNo, p]))))
+      .catch(() => { /* 목록 조회와 별개이며 기존 참가 기록을 유지한다. */ });
   }
 
   async function handleCompetitionStatusChange(id: string, status: CompetitionStatus) {
@@ -1532,6 +1522,7 @@ export default function Home() {
             bids={bids}
             loaded={bidsLoaded}
             error={bidsError}
+            onReload={() => loadBidsIfNeeded(true)}
             statusFilter={bidStatusFilter}
             onStatusFilter={setBidStatusFilter}
             participations={participations}
@@ -1550,6 +1541,7 @@ export default function Home() {
             bids={bids}
             loaded={bidsLoaded}
             error={bidsError}
+            onReload={() => loadBidsIfNeeded(true)}
             statusFilter={changwonStatusFilter}
             onStatusFilter={setChangwonStatusFilter}
             participations={participations}
