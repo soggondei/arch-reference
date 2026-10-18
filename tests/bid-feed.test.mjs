@@ -38,3 +38,14 @@ test('저장된 공고중 상태는 한국시간 실제 마감으로 보정하�
   for(const state of ['낙찰','유찰']){p.properties.상태.select.name=state;assert.equal(mapBidPage(p).상태,state);}
   p.properties.상태.select.name='공고중';p.properties.마감일.date.start='';assert.equal(mapBidPage(p).상태,'공고중');
 });
+
+test('구 추천가나 보류 건의 남은 숫자를 웹에 추천으로 노출하지 않음',()=>{
+ const p=page('A');p.properties.추천입찰가={number:40000000};p.properties.낙찰하한가={number:39000000};
+ const b=mapBidPage(p);assert.equal(b.추천입찰가,null);assert.equal(b.추천상태,'추천 보류');assert.ok(b.추천근거);
+});
+test('근거가 확인된 추천의 금액·사례수·기초금액·사유를 함께 전달',()=>{
+ const p=page('A');const rich=s=>({rich_text:[{plain_text:s}]});
+ Object.assign(p.properties,{가격모델:rich('basis-final-v1'),추천상태:rich('사례기반 참고'),추천근거:rich('전국 동일 금액대 최종낙찰 42건'),가격사례수:{number:42},추천입찰가:{number:42277363},기초금액:{number:48000000}});
+ const b=mapBidPage(p);assert.equal(b.추천입찰가,42277363);assert.equal(b.가격사례수,42);assert.equal(b.기초금액,48000000);
+ p.properties.추천상태=rich('추천 보류');assert.equal(mapBidPage(p).추천입찰가,null);
+});
