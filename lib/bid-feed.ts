@@ -19,13 +19,14 @@ export function mapBidPage(page: Page, now = Date.now()) {
   const props = page.properties;
   const result: Record<string, string | number | null> = { id: page.id };
   result.공고명 = text(props['공고명'], 'title');
-  for (const name of ['공고기관', '공고번호', '적용낙찰률', '낙찰업체', '참가가능지역', '면허조건', '참가검토', '공고차수', '가격모델', '추천상태', '추천근거', '가격자료출처', '가격기준시점', '가격비교범위', '업무분류', '결과확인', '결과출처', '계약방법', '낙찰방법', '가격산식확인']) result[name] = text(props[name], 'rich_text');
+  for (const name of ['공고기관', '공고번호', '적용낙찰률', '낙찰업체', '참가가능지역', '면허조건', '참가검토', '공고차수', '가격모델', '추천상태', '추천근거', '가격자료출처', '가격기준시점', '가격비교범위', '업무분류', '결과확인', '결과출처', '계약방법', '낙찰방법', '가격산식확인', '공고업종', '재입찰번호']) result[name] = text(props[name], 'rich_text');
   for (const name of ['지역', '상태', '입찰방법', '예가방법']) result[name] = (props[name]?.select as { name?: string } | null)?.name ?? '';
   for (const name of ['배정예산', '추천입찰가', '낙찰하한가', '실제낙찰금액', '실제낙찰률', '기초금액', '가격사례수', '사례참고가', '낙찰하한율', '공고설계비']) {
     const value = props[name]?.number;
     result[name] = typeof value === 'number' && Number.isFinite(value) ? value : null;
   }
   for (const name of ['공고일', '마감일', '개찰일', '추천갱신일']) result[name] = (props[name]?.date as { start?: string } | null)?.start ?? '';
+  result.저장갱신일 = result.추천갱신일;
   // 2026-10-18: 과거 저장 상태가 공고중이어도 실제 마감시각이 지났으면 마감으로 표시한다.
   // 시각 없는 기존 날짜는 한국시간 해당일 종료까지 유지하고 낙찰·유찰 상태는 보존한다.
   const closing = String(result.마감일 || '');
