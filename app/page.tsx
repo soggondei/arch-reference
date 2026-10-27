@@ -191,7 +191,7 @@ interface BidItem {
   가격모델?: string; 추천상태?: string; 추천근거?: string; 가격자료출처?: string; 가격기준시점?: string; 가격비교범위?: string;
   기초금액?: number | null; 가격사례수?: number | null; 추천갱신일?: string;
   참가가능지역?: string; 면허조건?: string; 참가검토?: string;
-  업무분류?: string; 사례참고가?: number | null; 기존결과금액?: number | null;
+  사례자료기준?: string; 공고설계비?: number | null; 업무분류?: string; 사례참고가?: number | null; 기존결과금액?: number | null;
   낙찰업체: string; 공고일: string; 마감일: string; 개찰일: string; 공고URL: string;
 }
 
@@ -556,16 +556,17 @@ function BidsView({
                 <div className="col-span-full text-xs text-zinc-500"><p>{bid.참가검토 || '참가자격 확인 필요 · 기존 수집 자료'}</p>{bid.참가가능지역 && <p>참가가능지역: {bid.참가가능지역}</p>}{bid.면허조건 && <p>면허조건: {bid.면허조건}</p>}</div>
                 <div className="w-full rounded-lg bg-slate-50 p-3 space-y-1.5">
                   {bid.추천입찰가 ? (
-                    <p><span className="text-zinc-500">투찰 추천가 </span><span className="font-semibold text-blue-700">{fmtWon(bid.추천입찰가)}</span></p>
+                    <p><span className="text-zinc-500">입찰 추천가 </span><span className="font-semibold text-blue-700">{fmtWon(bid.추천입찰가)}</span></p>
                   ) : (
-                    <p className="font-semibold text-amber-700">추천 보류</p>
+                    <p className="font-semibold text-amber-700">{bid.공고설계비 ? `공고 설계비 ${fmtWon(bid.공고설계비)}` : '금액 정보 필요'}</p>
                   )}
+                  <p className="font-medium text-slate-700">{bid.추천상태}</p>
                   <p className="text-zinc-600">{bid.추천근거 || '가격 근거 확인 필요'}</p>
-                  {!!bid.사례참고가 && <details><summary className="cursor-pointer">과거 사례 통계 보기 · 투찰 추천 아님</summary><p>중앙값 {fmtWon(bid.사례참고가)} · {bid.가격사례수}건 · {bid.가격비교범위}</p></details>}
+                  {!!bid.사례참고가 && <details><summary className="cursor-pointer">추천 산정에 사용한 사례 통계</summary><p>중앙값 {fmtWon(bid.사례참고가)} · {bid.가격사례수}건 · {bid.가격비교범위}</p></details>}
                   {!!bid.기초금액 && <p className="text-zinc-500">기초금액 {fmtWon(bid.기초금액)}{bid.적용낙찰률 && ` · ${bid.적용낙찰률}`}</p>}
                   {bid.추천입찰가 && <p className="text-zinc-500">비교 사례 {bid.가격사례수}건 · {bid.가격비교범위}<br />예정가격은 개찰 전 미정이며, 이 금액이 하한 충족이나 낙찰을 보장하지 않습니다.</p>}
                   {bid.가격자료출처?.startsWith('https://www.g2b.go.kr/') && <a className="text-blue-600 underline" href={bid.가격자료출처} target="_blank" rel="noreferrer">기초금액 확인 원문</a>}
-                  {bid.가격기준시점 && <p className="text-[11px] text-zinc-400">자료 기준 {bid.가격기준시점.slice(0, 10)} · 갱신 {bid.추천갱신일?.slice(0, 10) || '-'}</p>}
+                  {bid.가격기준시점 && <p className="text-[11px] text-zinc-400">산정 기준 {bid.가격기준시점.slice(0, 10)} · 사례: {bid.사례자료기준} · 갱신 {bid.추천갱신일?.slice(0, 10) || '-'}</p>}
                 </div>
                 {bid.실제낙찰금액 && (
                   <div>

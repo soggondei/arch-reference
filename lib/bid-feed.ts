@@ -1,3 +1,6 @@
+import pricing from './price-evidence.cjs';
+import priceCases from './price-cases.json' with { type: 'json' };
+import conditions from './price-conditions.json' with { type: 'json' };
 type Property = Record<string, unknown>;
 type Page = { id: string; properties: Record<string, Property> };
 
@@ -16,9 +19,9 @@ export function mapBidPage(page: Page, now = Date.now()) {
   const props = page.properties;
   const result: Record<string, string | number | null> = { id: page.id };
   result.공고명 = text(props['공고명'], 'title');
-  for (const name of ['공고기관', '공고번호', '적용낙찰률', '낙찰업체', '참가가능지역', '면허조건', '참가검토', '공고차수', '가격모델', '추천상태', '추천근거', '가격자료출처', '가격기준시점', '가격비교범위', '업무분류', '결과확인', '결과출처']) result[name] = text(props[name], 'rich_text');
+  for (const name of ['공고기관', '공고번호', '적용낙찰률', '낙찰업체', '참가가능지역', '면허조건', '참가검토', '공고차수', '가격모델', '추천상태', '추천근거', '가격자료출처', '가격기준시점', '가격비교범위', '업무분류', '결과확인', '결과출처', '계약방법', '낙찰방법', '가격산식확인']) result[name] = text(props[name], 'rich_text');
   for (const name of ['지역', '상태', '입찰방법', '예가방법']) result[name] = (props[name]?.select as { name?: string } | null)?.name ?? '';
-  for (const name of ['배정예산', '추천입찰가', '낙찰하한가', '실제낙찰금액', '실제낙찰률', '기초금액', '가격사례수', '사례참고가']) {
+  for (const name of ['배정예산', '추천입찰가', '낙찰하한가', '실제낙찰금액', '실제낙찰률', '기초금액', '가격사례수', '사례참고가', '낙찰하한율', '공고설계비']) {
     const value = props[name]?.number;
     result[name] = typeof value === 'number' && Number.isFinite(value) ? value : null;
   }
@@ -28,13 +31,32 @@ export function mapBidPage(page: Page, now = Date.now()) {
   const closing = String(result.마감일 || '');
   const deadline = Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(closing) ? closing + 'T23:59:59.999+09:00' : closing);
   if (result.상태 === '공고중' && Number.isFinite(deadline) && deadline < now) result.상태 = '마감';
-  // 2026-10-27: 기존 중앙값은 투찰 추천으로 검증되지 않았다. 원자료는 DB에 보존한다.
-  const validReference = result.가격모델 === 'basis-reference-v2' && Number(result.가격사례수) >= 10 && Number(result.사례참고가) > 0;
-  result.사례참고가 = validReference ? result.사례참고가 : null;
-  result.추천입찰가 = null; result.낙찰하한가 = null; result.적용낙찰률 = '';
-  result.추천상태 = '추천 보류';
-  if (result.가격모델 !== 'basis-reference-v2') result.추천근거 = '기존 사례 중앙값의 투찰 추천 성능 미검증 · 재검토 필요';
-  result.추천근거 = result.추천근거 || '가격 근거 확인 필요';
+  // 2026-10-27 사용자 요청: 저장된 보류 상태와 무관하게 조회 시 동일 엔진으로 재계산한다.
+  // 과거 공고에는 마감 이후 공개된 낙찰 결과가 들어가지 않는다.
+  const day = new Date(now + 9*3600000).toISOString().slice(0,10);
+  const asOf = Number.isFinite(deadline) && deadline < now ? closing.slice(0,10) : day;
+  const storedGuidance = result.가격모델 === 'bid-guidance-v3' && result.가격기준시점 && String(result.가격기준시점).slice(0,10) <= asOf && (Number(result.추천입찰가) > 0 || Number(result.공고설계비) > 0);
+  result.사례자료기준 = storedGuidance ? '수집기 갱신 자료' : '2026-10-18 수집 자료';
+  if (!storedGuidance) {
+  const source = conditions.find(c => c.공고번호 === result.공고번호 && c.공고차수 === (result.공고차수 || '000') && c.공고명 === result.공고명);
+  const input = { ...result };
+  // 저장된 최신 필드를 우선하고, 기존 수집 공고의 누락 조건만 보완한다.
+  if (source) for (const [name,value] of Object.entries(source)) if (input[name] == null || input[name] === '') input[name] = value as string | number | null;
+  input.기초금액출처 = input.가격자료출처 || input.기초금액출처 || '';
+  const analysis = pricing.analyzeBidPrice(input, priceCases, { asOf }) as Record<string, unknown>;
+  result.추천입찰가 = typeof analysis.추천입찰가 === 'number' ? analysis.추천입찰가 : null;
+  result.공고설계비 = typeof analysis.공고설계비 === 'number' ? analysis.공고설계비 : null;
+  result.사례참고가 = typeof analysis.사례참고가 === 'number' ? analysis.사례참고가 : null;
+  result.가격사례수 = Number(analysis.사례수 || 0);
+  result.가격비교범위 = String(analysis.비교범위 || '');
+  result.추천상태 = String(analysis.추천상태);
+  result.추천근거 = String(analysis.분석);
+  result.가격모델 = String(analysis.모델버전);
+  result.가격기준시점 = asOf;
+  result.추천갱신일 = day;
+  result.적용낙찰률 = String(analysis.적용낙찰률 || '');
+  result.낙찰하한가 = null;
+  }
   const finalConfirmed = result.결과확인 === '최종낙찰 확인' && result.결과출처 === 'getScsbidListSttusServc';
   if (!finalConfirmed) {
     result.기존결과금액 = result.실제낙찰금액;
