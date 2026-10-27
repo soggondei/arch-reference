@@ -91,7 +91,9 @@ export async function loadBidFeed(token: string, databaseId: string, request: ty
       if (!Array.isArray(data.results) || typeof data.has_more !== 'boolean') throw new BidFeedError('입찰 저장소의 응답 형식이 올바르지 않습니다.');
       for (const page of data.results) {
         if (!page?.id || !page.properties) throw new BidFeedError('입찰 항목을 읽을 수 없습니다.');
-        pages.set(page.id, mapBidPage(page));
+        if (text(page.properties.공고번호, 'rich_text') === '__BIDCP_FEED_V1__') {
+          pages.set(page.id, { id: page.id, 공고번호: '__BIDCP_FEED_V1__', 공고기관: text(page.properties.공고기관, 'rich_text') });
+        } else pages.set(page.id, mapBidPage(page));
       }
       if (data.has_more) {
         if (typeof data.next_cursor !== 'string' || !data.next_cursor || cursors.has(data.next_cursor)) throw new BidFeedError('입찰 목록의 다음 페이지를 읽을 수 없습니다.');
