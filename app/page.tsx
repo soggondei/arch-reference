@@ -371,7 +371,10 @@ function ChangwonView(props: {
   agencyTypeFilter: AgencyType | '전체';
   onAgencyTypeFilter: (a: AgencyType | '전체') => void;
 }) {
-  const [includeUnverified, setIncludeUnverified] = useState(false);
+  // 2026-10-27: 기존 자료의 지역정보 누락으로 목록 전체가 숨겨지는 것을 방지한다.
+  const [includeUnverified, setIncludeUnverified] = useState(true);
+  const latestNotice = props.bids.map(b => b.공고일).filter(Boolean).sort().at(-1) || '';
+  const noticeAge = latestNotice ? Math.floor((Date.now() - Date.parse(latestNotice.slice(0,10) + 'T00:00:00+09:00')) / 86400000) : 0;
   const scopeBids = props.bids.filter(classifyChangwon);
   const unverifiedCount = scopeBids.filter(bid => gyeongnamScope(bid) === '확인 필요').length;
   const changwonBids = scopeBids.filter(bid => includeUnverified || gyeongnamScope(bid) === '해당').map(bid => gyeongnamScope(bid) === '확인 필요' ? { ...bid, 참가검토: '경남 참가 가능 여부 확인 필요 · 지역조건 자료 미확인' } : bid);
@@ -393,10 +396,12 @@ function ChangwonView(props: {
       {props.loaded && !props.error && (
         <div className="mb-4 text-sm text-zinc-600 bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-3">
           <p className="mb-2 font-semibold">용역 · 건축설계 · 경상남도</p>
-          <p className="mb-2 text-xs">경남 소재 사무소 참가 대상(전국 허용 포함) · 시·군 제한과 추가자격 확인 필요</p>
+          <p className="mb-2 text-xs">경남 소재 사무소 참가 후보(전국 허용 포함) · 미확인 공고는 참가 지역 확인 필요</p>
           <label className="mb-2 flex items-center gap-2 text-xs"><input type="checkbox" checked={includeUnverified} onChange={e => setIncludeUnverified(e.target.checked)} />참가지역 미확인 후보도 보기 ({unverifiedCount}건)</label>
-          <p className="mb-2 text-xs">전체 수집 목록 최신 공고일: {props.bids.map(b => b.공고일).filter(Boolean).sort().at(-1) || '없음'} · 화면은 5분마다 새로고침</p>
-          대상 공고 <span className="font-semibold text-zinc-900">{changwonBids.length}건</span>
+          <p className="mb-2 text-xs">전체 수집 목록 최신 공고일: {latestNotice || '없음'} · 화면은 5분마다 새로고침</p>
+          {noticeAge >= 3 && <p className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900">신규 수집 상태 확인 필요 · 최신 공고 이후 {noticeAge}일이 지났습니다. 현재 표시되는 후보는 저장된 과거 자료입니다.</p>}
+          <p className="mb-2 text-xs">지역 확인 {scopeBids.length - unverifiedCount}건 · 지역 미확인 {unverifiedCount}건. 미확인 후보를 포함한 수치는 경남 참가 확정 건수가 아닙니다.</p>
+          표시 후보 <span className="font-semibold text-zinc-900">{changwonBids.length}건</span>
           {' · '}참가완료 <span className="font-semibold text-zinc-900">{참가완료}건</span>
           {' '}(낙찰 {낙찰} · 패찰 {패찰} · 결과대기 {결과대기})
         </div>
