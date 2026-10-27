@@ -13,6 +13,7 @@ import FilterSheet from '@/components/FilterSheet';
 import UploadForm from '@/components/UploadForm';
 import LinkForm from '@/components/LinkForm';
 import Link from 'next/link';
+import { gyeongnamScope } from '@/lib/bid-scope';
 
 // ── 링크 즐겨찾기 ──────────────────────────────────────────────────────────
 function LinkCard({
@@ -190,6 +191,7 @@ interface BidItem {
   가격모델?: string; 추천상태?: string; 추천근거?: string; 가격자료출처?: string; 가격기준시점?: string; 가격비교범위?: string;
   기초금액?: number | null; 가격사례수?: number | null; 추천갱신일?: string;
   참가가능지역?: string; 면허조건?: string; 참가검토?: string;
+  업무분류?: string; 사례참고가?: number | null; 기존결과금액?: number | null;
   낙찰업체: string; 공고일: string; 마감일: string; 개찰일: string; 공고URL: string;
 }
 
@@ -217,9 +219,7 @@ function classifyAgency(공고기관: string): AgencyType {
 }
 
 function classifyChangwon(bid: BidItem): boolean {
-  // 2010년 마산·창원·진해 통합 — 마산은 대개 "창원교육지원청" 등으로 표기돼 이미 걸리지만,
-  // 진해는 자체 기관명(예: "경상남도교육청 진해중앙고등학교")에 "창원"이 없어 따로 확인해야 한다.
-  return /창원|마산|진해/.test(bid.공고명) || /창원|마산|진해/.test(bid.공고기관);
+  return gyeongnamScope(bid) !== '제외';
 }
 
 type Outcome = '낙찰' | '패찰' | '결과대기';
@@ -371,7 +371,7 @@ function ChangwonView(props: {
   agencyTypeFilter: AgencyType | '전체';
   onAgencyTypeFilter: (a: AgencyType | '전체') => void;
 }) {
-  const changwonBids = props.bids.filter(classifyChangwon);
+  const changwonBids = props.bids.filter(classifyChangwon).map(bid => gyeongnamScope(bid) === '확인 필요' ? { ...bid, 참가검토: '경남 참가 가능 여부 확인 필요 · 지역조건 자료 미확인' } : bid);
 
   let 참가완료 = 0, 낙찰 = 0, 패찰 = 0, 결과대기 = 0;
   changwonBids.forEach(bid => {
@@ -389,7 +389,9 @@ function ChangwonView(props: {
     <div className="flex-1 min-w-0">
       {props.loaded && !props.error && (
         <div className="mb-4 text-sm text-zinc-600 bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-3">
-          창원·마산·진해 관련 공고 <span className="font-semibold text-zinc-900">{changwonBids.length}건</span>
+          <p className="mb-2 font-semibold">용역 · 건축설계 · 경상남도</p>
+          <p className="mb-2 text-xs">경남 소재 사무소 참가 대상(전국 허용 포함) · 시·군 제한과 추가자격 확인 필요 · 지역조건 미확인 {changwonBids.filter(b => gyeongnamScope(b) === '확인 필요').length}건</p>
+          대상 공고 <span className="font-semibold text-zinc-900">{changwonBids.length}건</span>
           {' · '}참가완료 <span className="font-semibold text-zinc-900">{참가완료}건</span>
           {' '}(낙찰 {낙찰} · 패찰 {패찰} · 결과대기 {결과대기})
         </div>
@@ -416,7 +418,7 @@ function BidsView({
   agencyTypeFilter: AgencyType | '전체';
   onAgencyTypeFilter: (a: AgencyType | '전체') => void;
 }) {
-  const statuses = ['전체', '공고중', '마감', '낙찰', '유찰'];
+  const statuses = ['전체', '공고중', '마감', '낙찰', '유찰', '결과확인필요'];
   const counts = Object.fromEntries(statuses.map(s => [s, bids.filter(b => s === '전체' || b.상태 === s).length]));
   const regions = Array.from(new Set(bids.map(b => b.지역).filter(Boolean))).sort();
   const q = searchQuery.trim().toLowerCase();
@@ -457,7 +459,7 @@ function BidsView({
           onChange={e => onRegionFilter(e.target.value)}
           className="border border-zinc-200 rounded-lg px-2 py-1.5 text-sm text-zinc-700 shrink-0"
         >
-          <option value="전체">전체 지역</option>
+          <option value="전체">전체 발주지역</option>
           {regions.map(r => (
             <option key={r} value={r}>{r}</option>
           ))}
@@ -549,11 +551,12 @@ function BidsView({
                 <div className="col-span-full text-xs text-zinc-500"><p>{bid.참가검토 || '참가자격 확인 필요 · 기존 수집 자료'}</p>{bid.참가가능지역 && <p>참가가능지역: {bid.참가가능지역}</p>}{bid.면허조건 && <p>면허조건: {bid.면허조건}</p>}</div>
                 <div className="w-full rounded-lg bg-slate-50 p-3 space-y-1.5">
                   {bid.추천입찰가 ? (
-                    <p><span className="text-zinc-500">사례 기반 참고가 </span><span className="font-semibold text-blue-700">{fmtWon(bid.추천입찰가)}</span></p>
+                    <p><span className="text-zinc-500">투찰 추천가 </span><span className="font-semibold text-blue-700">{fmtWon(bid.추천입찰가)}</span></p>
                   ) : (
                     <p className="font-semibold text-amber-700">추천 보류</p>
                   )}
                   <p className="text-zinc-600">{bid.추천근거 || '가격 근거 확인 필요'}</p>
+                  {!!bid.사례참고가 && <details><summary className="cursor-pointer">과거 사례 통계 보기 · 투찰 추천 아님</summary><p>중앙값 {fmtWon(bid.사례참고가)} · {bid.가격사례수}건 · {bid.가격비교범위}</p></details>}
                   {!!bid.기초금액 && <p className="text-zinc-500">기초금액 {fmtWon(bid.기초금액)}{bid.적용낙찰률 && ` · ${bid.적용낙찰률}`}</p>}
                   {bid.추천입찰가 && <p className="text-zinc-500">비교 사례 {bid.가격사례수}건 · {bid.가격비교범위}<br />예정가격은 개찰 전 미정이며, 이 금액이 하한 충족이나 낙찰을 보장하지 않습니다.</p>}
                   {bid.가격자료출처?.startsWith('https://www.g2b.go.kr/') && <a className="text-blue-600 underline" href={bid.가격자료출처} target="_blank" rel="noreferrer">기초금액 확인 원문</a>}
@@ -563,9 +566,10 @@ function BidsView({
                   <div>
                     <span className="text-zinc-400">낙찰금액 </span>
                     <span className="font-semibold text-green-600">{fmtWon(bid.실제낙찰금액)}</span>
-                    {bid.실제낙찰률 && <span className="text-zinc-400 ml-1">({bid.실제낙찰률.toFixed(2)}%)</span>}
+                    {bid.실제낙찰률 && <span className="text-zinc-400 ml-1">({(bid.실제낙찰률 * 100).toFixed(3)}%)</span>}
                   </div>
                 )}
+                {!!bid.기존결과금액 && <p className="text-amber-700">기존 수집금액 {fmtWon(bid.기존결과금액)} · 최종 낙찰 미확인</p>}
                 {participations[bid.공고번호]?.status === '참가완료' && (
                   <div>
                     <span className="text-zinc-400">제출입찰가 </span>
@@ -1134,7 +1138,7 @@ export default function Home() {
     setParticipations(prev => ({ ...prev, [p.bidNo]: p }));
   }
 
-  function loadBidsIfNeeded(force = false) {
+  const loadBidsIfNeeded = useCallback((force = false) => {
     if (bidsLoading.current || (bidsLoaded && !bidsError && !force)) return;
     bidsLoading.current = true;
     setBidsLoaded(false);
@@ -1151,7 +1155,15 @@ export default function Home() {
     getBidParticipations()
       .then(data => setParticipations(Object.fromEntries(data.map(p => [p.bidNo, p]))))
       .catch(() => { /* 목록 조회와 별개이며 기존 참가 기록을 유지한다. */ });
-  }
+  }, [bidsLoaded, bidsError]);
+
+  useEffect(() => {
+    if (tab !== 'bids' && tab !== 'changwon') return;
+    const refresh = () => { if (document.visibilityState === 'visible') loadBidsIfNeeded(true); };
+    const timer = window.setInterval(refresh, 5 * 60 * 1000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', refresh); };
+  }, [tab, loadBidsIfNeeded]);
 
   async function handleCompetitionStatusChange(id: string, status: CompetitionStatus) {
     if (syncingIds.current.has(id)) return;
@@ -1376,7 +1388,7 @@ export default function Home() {
             onClick={() => { setTab('changwon'); loadBidsIfNeeded(); }}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${tab === 'changwon' ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-400 hover:text-zinc-700'}`}
           >
-            창원시
+            경상남도
           </button>
           <button
             onClick={() => setTab('links')}
