@@ -191,7 +191,7 @@ interface BidItem {
   가격모델?: string; 추천상태?: string; 추천근거?: string; 가격자료출처?: string; 가격기준시점?: string; 가격비교범위?: string;
   기초금액?: number | null; 가격사례수?: number | null; 추천갱신일?: string;
   참가가능지역?: string; 면허조건?: string; 참가검토?: string;
-  공고업종?: string; 필터근거?: string; 기준사이트ID?: string; 기준사이트URL?: string; 자료확인일?: string; 정기수집최근일?: string; 목록입력일?: string; 참가마감?: string; 공고차수?: string; 재입찰번호?: string;
+  상공회의소수집방식?: string; 상공회의소오류?: string; 공고업종?: string; 필터근거?: string; 기준사이트ID?: string; 기준사이트URL?: string; 자료확인일?: string; 정기수집최근일?: string; 목록입력일?: string; 참가마감?: string; 공고차수?: string; 재입찰번호?: string;
   사례자료기준?: string; 공고설계비?: number | null; 업무분류?: string; 사례참고가?: number | null; 기존결과금액?: number | null;
   낙찰업체: string; 공고일: string; 마감일: string; 개찰일: string; 공고URL: string;
 }
@@ -401,7 +401,9 @@ function ChangwonView(props: {
           <label className="mb-2 flex items-center gap-2 text-xs"><input type="checkbox" checked={includeUnverified} onChange={e => setIncludeUnverified(e.target.checked)} />참가지역 미확인 후보도 보기 ({unverifiedCount}건)</label>
           <p className="mb-2 text-xs">정기 수집 자료의 최신 공고일: {latestNotice || '없음'} · 화면은 5분마다 새로고침</p>
           <p className="mb-2 text-xs">창원상공회의소 목록 대조: {props.bids.filter(b => b.기준사이트ID).length}개 항목 · 확인 {props.bids.find(b => b.자료확인일)?.자료확인일?.slice(0,10) || '-'} · 취소·정정·재입찰 이력 포함</p>
-          <p className="mb-2 text-xs text-amber-800">상공회의소 자료는 확인일 기준으로 보완했습니다. 해당 사이트의 실시간 자동 동기화는 아직 연결되지 않았습니다.</p>
+          <p className="mb-2 text-xs text-amber-800">{props.bids.find(b => b.기준사이트ID)?.상공회의소수집방식 === '자동 동기화'
+            ? `상공회의소 자동 동기화 · 마지막 정상 조회 ${new Date(props.bids.find(b => b.자료확인일)?.자료확인일 || '').toLocaleString('ko-KR', {timeZone:'Asia/Seoul'})} (한국시간) · ${props.bids.find(b => b.상공회의소오류)?.상공회의소오류 || (Date.now() - Date.parse(props.bids.find(b => b.자료확인일)?.자료확인일 || '') > 26*3600000 ? '조회 지연 · Mac 실행 상태 확인 필요' : '기존 정기 실행에 연결')}`
+            : '상공회의소 자료는 확인일 기준으로 보완했습니다. 자동 동기화 첫 저장을 기다리고 있습니다.'}</p>
           {noticeAge >= 3 && <p className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900">신규 수집 상태 확인 필요 · 최신 공고 이후 {noticeAge}일이 지났습니다. 정기 수집 복구가 필요합니다. 별도로 대조한 상공회의소 공고는 아래 목록에 보완했습니다.</p>}
           <p className="mb-2 text-xs">지역 확인 {scopeBids.length - unverifiedCount}건 · 지역 미확인 {unverifiedCount}건. 미확인 후보를 포함한 수치는 경남 참가 확정 건수가 아닙니다.</p>
           표시 후보 <span className="font-semibold text-zinc-900">{changwonBids.length}건</span>
