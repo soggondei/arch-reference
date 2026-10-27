@@ -15,6 +15,8 @@ test('기준 사이트 253개 항목과 취소·재입찰·타 조달번호를 �
 test('창원 신규 공고의 부가세 포함 기초금액과 하한율을 연결하고 추천한다',()=>{
  const b=reconcileBidcpFeed([],now).find(r=>r.공고번호==='R26BK01790350');
  assert.equal(b.기초금액,28036800);assert.equal(b.낙찰하한율,88);assert.equal(b.참가가능지역,'경상남도 창원시');assert.equal(b.상태,'공고중');assert.ok(b.추천입찰가>24000000&&b.추천입찰가<26000000);assert.match(b.참가검토,/공동도급 불가/);
+ const rows=reconcileBidcpFeed([],now);const parking=rows.find(b=>b.공고번호==='R26BK01793227');assert.equal(parking.추천입찰가,85272000);assert.match(parking.참가검토,/구성원도 적용/);
+ assert.equal(rows.find(b=>b.공고번호==='R26BK01792230').추천입찰가,58960000);
 });
 test('취소 이력은 공고중이나 유효 추천으로 표시하지 않는다',()=>{
  for(const b of reconcileBidcpFeed([],now).filter(b=>b.상태==='취소')){assert.equal(b.추천입찰가,null);assert.equal(b.추천상태,'취소 공고');}
