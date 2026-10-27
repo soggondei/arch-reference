@@ -191,6 +191,7 @@ interface BidItem {
   가격모델?: string; 추천상태?: string; 추천근거?: string; 가격자료출처?: string; 가격기준시점?: string; 가격비교범위?: string;
   기초금액?: number | null; 가격사례수?: number | null; 추천갱신일?: string;
   참가가능지역?: string; 면허조건?: string; 참가검토?: string;
+  공고업종?: string; 필터근거?: string; 기준사이트ID?: string; 기준사이트URL?: string; 자료확인일?: string; 정기수집최근일?: string; 목록입력일?: string; 참가마감?: string; 공고차수?: string; 재입찰번호?: string;
   사례자료기준?: string; 공고설계비?: number | null; 업무분류?: string; 사례참고가?: number | null; 기존결과금액?: number | null;
   낙찰업체: string; 공고일: string; 마감일: string; 개찰일: string; 공고URL: string;
 }
@@ -201,7 +202,7 @@ function fmtWon(n: number | null): string {
 }
 
 const BID_STATUS_COLOR: Record<string, string> = {
-  '공고중': '#3b82f6', '낙찰': '#22c55e', '유찰': '#94a3b8',
+  '전체': '#18181b', '공고중': '#3b82f6', '마감': '#64748b', '낙찰': '#22c55e', '유찰': '#94a3b8', '취소':'#dc2626', '결과확인필요':'#d97706',
 };
 
 const AGENCY_TYPES = ['교육청', '지자체', '조달청', '농어촌·수산', '국방·군부대', '대학교', '공사·공단·진흥원', '기타'] as const;
@@ -371,9 +372,9 @@ function ChangwonView(props: {
   agencyTypeFilter: AgencyType | '전체';
   onAgencyTypeFilter: (a: AgencyType | '전체') => void;
 }) {
-  // 2026-10-27: 기존 자료의 지역정보 누락으로 목록 전체가 숨겨지는 것을 방지한다.
-  const [includeUnverified, setIncludeUnverified] = useState(true);
-  const latestNotice = props.bids.map(b => b.공고일).filter(Boolean).sort().at(-1) || '';
+  // 2026-10-27: 대조한 업종·지역 목록을 기본 표시하고, 근거 없는 후보는 선택해서 본다.
+  const [includeUnverified, setIncludeUnverified] = useState(false);
+  const latestNotice = props.bids.map(b => b.정기수집최근일 || b.공고일).filter(Boolean).sort().at(-1) || '';
   const noticeAge = latestNotice ? Math.floor((Date.now() - Date.parse(latestNotice.slice(0,10) + 'T00:00:00+09:00')) / 86400000) : 0;
   const scopeBids = props.bids.filter(classifyChangwon);
   const unverifiedCount = scopeBids.filter(bid => gyeongnamScope(bid) === '확인 필요').length;
@@ -396,10 +397,12 @@ function ChangwonView(props: {
       {props.loaded && !props.error && (
         <div className="mb-4 text-sm text-zinc-600 bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-3">
           <p className="mb-2 font-semibold">용역 · 건축설계 · 경상남도</p>
-          <p className="mb-2 text-xs">경남 소재 사무소 참가 후보(전국 허용 포함) · 미확인 공고는 참가 지역 확인 필요</p>
+          <p className="mb-2 text-xs">건축설계 업종(감리·기획 포함) · 경남 및 전국·경남 복합 지역 · 시군별 소재지 제한 확인</p>
           <label className="mb-2 flex items-center gap-2 text-xs"><input type="checkbox" checked={includeUnverified} onChange={e => setIncludeUnverified(e.target.checked)} />참가지역 미확인 후보도 보기 ({unverifiedCount}건)</label>
-          <p className="mb-2 text-xs">전체 수집 목록 최신 공고일: {latestNotice || '없음'} · 화면은 5분마다 새로고침</p>
-          {noticeAge >= 3 && <p className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900">신규 수집 상태 확인 필요 · 최신 공고 이후 {noticeAge}일이 지났습니다. 현재 표시되는 후보는 저장된 과거 자료입니다.</p>}
+          <p className="mb-2 text-xs">정기 수집 자료의 최신 공고일: {latestNotice || '없음'} · 화면은 5분마다 새로고침</p>
+          <p className="mb-2 text-xs">창원상공회의소 목록 대조: {props.bids.filter(b => b.기준사이트ID).length}개 항목 · 확인 {props.bids.find(b => b.자료확인일)?.자료확인일?.slice(0,10) || '-'} · 취소·정정·재입찰 이력 포함</p>
+          <p className="mb-2 text-xs text-amber-800">상공회의소 자료는 확인일 기준으로 보완했습니다. 해당 사이트의 실시간 자동 동기화는 아직 연결되지 않았습니다.</p>
+          {noticeAge >= 3 && <p className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900">신규 수집 상태 확인 필요 · 최신 공고 이후 {noticeAge}일이 지났습니다. 정기 수집 복구가 필요합니다. 별도로 대조한 상공회의소 공고는 아래 목록에 보완했습니다.</p>}
           <p className="mb-2 text-xs">지역 확인 {scopeBids.length - unverifiedCount}건 · 지역 미확인 {unverifiedCount}건. 미확인 후보를 포함한 수치는 경남 참가 확정 건수가 아닙니다.</p>
           표시 후보 <span className="font-semibold text-zinc-900">{changwonBids.length}건</span>
           {' · '}참가완료 <span className="font-semibold text-zinc-900">{참가완료}건</span>
@@ -428,7 +431,7 @@ function BidsView({
   agencyTypeFilter: AgencyType | '전체';
   onAgencyTypeFilter: (a: AgencyType | '전체') => void;
 }) {
-  const statuses = ['전체', '공고중', '마감', '낙찰', '유찰', '결과확인필요'];
+  const statuses = ['전체', '공고중', '마감', '낙찰', '유찰', '취소', '일정확인필요', '결과확인필요'];
   const counts = Object.fromEntries(statuses.map(s => [s, bids.filter(b => s === '전체' || b.상태 === s).length]));
   const regions = Array.from(new Set(bids.map(b => b.지역).filter(Boolean))).sort();
   const q = searchQuery.trim().toLowerCase();
@@ -439,7 +442,7 @@ function BidsView({
     if (participationFilter !== '전체' && participationFilter !== '참가필요' && pStatus !== participationFilter) return false;
     if (regionFilter !== '전체' && b.지역 !== regionFilter) return false;
     if (agencyTypeFilter !== '전체' && classifyAgency(b.공고기관) !== agencyTypeFilter) return false;
-    if (q && !b.공고명.toLowerCase().includes(q) && !b.공고기관.toLowerCase().includes(q)) return false;
+    if (q && !b.공고명.toLowerCase().includes(q) && !b.공고기관.toLowerCase().includes(q) && !b.공고번호.toLowerCase().includes(q)) return false;
     return true;
   });
 
@@ -461,7 +464,7 @@ function BidsView({
           type="text"
           value={searchQuery}
           onChange={e => onSearchQuery(e.target.value)}
-          placeholder="공고명·공고기관 검색"
+          placeholder="공고명·공고번호·공고기관 검색"
           className="flex-1 min-w-0 border border-zinc-200 rounded-lg px-3 py-1.5 text-sm"
         />
         <select
@@ -558,12 +561,12 @@ function BidsView({
                   <span className="text-zinc-400">배정예산 </span>
                   <span className="font-semibold text-zinc-800">{fmtWon(bid.배정예산)}</span>
                 </div>
-                <div className="col-span-full text-xs text-zinc-500"><p>{bid.참가검토 || '참가자격 확인 필요 · 기존 수집 자료'}</p>{bid.참가가능지역 && <p>참가가능지역: {bid.참가가능지역}</p>}{bid.면허조건 && <p>면허조건: {bid.면허조건}</p>}</div>
+                <div className="col-span-full text-xs text-zinc-500"><p>공고번호 {bid.공고번호}{bid.공고차수 ? `-${bid.공고차수}` : ''}{Number(bid.재입찰번호) > 0 ? ` · 재입찰 ${Number(bid.재입찰번호)}회` : ''}</p>{bid.참가마감 && <p>참가등록 마감: {bid.참가마감.slice(0,16).replace('T',' ')}{bid.상태 === '공고중' && Date.parse(bid.참가마감) < Date.now() && <strong className="ml-2 text-amber-700">등록 마감 지남 · 사전 등록 여부 확인</strong>}</p>}{bid.기준사이트URL && <p><a href={bid.기준사이트URL} target="_blank" rel="noreferrer" className="underline">상공회의소 확인 자료</a> · 목록 입력일 {bid.목록입력일} · 확인일 {bid.자료확인일?.slice(0,10)}</p>}<p>{bid.참가검토 || '참가자격 확인 필요 · 기존 수집 자료'}</p>{bid.참가가능지역 && <p>참가가능지역: {bid.참가가능지역}</p>}{bid.면허조건 && <p>면허조건: {bid.면허조건}</p>}</div>
                 <div className="w-full rounded-lg bg-slate-50 p-3 space-y-1.5">
                   {bid.추천입찰가 ? (
                     <p><span className="text-zinc-500">입찰 추천가 </span><span className="font-semibold text-blue-700">{fmtWon(bid.추천입찰가)}</span></p>
                   ) : (
-                    <p className="font-semibold text-amber-700">{bid.공고설계비 ? `공고 설계비 ${fmtWon(bid.공고설계비)}` : '금액 정보 필요'}</p>
+                    <p className="font-semibold text-amber-700">{bid.공고설계비 ? `공고 설계비 ${fmtWon(bid.공고설계비)}` : bid.상태 === '취소' ? '취소 공고' : '금액 정보 필요'}</p>
                   )}
                   <p className="font-medium text-slate-700">{bid.추천상태}</p>
                   <p className="text-zinc-600">{bid.추천근거 || '가격 근거 확인 필요'}</p>
@@ -1016,7 +1019,7 @@ export default function Home() {
   const [bidSearchQuery, setBidSearchQuery] = useState('');
   const [bidRegionFilter, setBidRegionFilter] = useState('전체');
   const [bidAgencyTypeFilter, setBidAgencyTypeFilter] = useState<AgencyType | '전체'>('전체');
-  const [changwonStatusFilter, setChangwonStatusFilter] = useState<string>('공고중');
+  const [changwonStatusFilter, setChangwonStatusFilter] = useState<string>('전체');
   const [changwonParticipationFilter, setChangwonParticipationFilter] = useState<ParticipationFilter>('전체');
   const [changwonSearchQuery, setChangwonSearchQuery] = useState('');
   const [changwonRegionFilter, setChangwonRegionFilter] = useState('전체');
