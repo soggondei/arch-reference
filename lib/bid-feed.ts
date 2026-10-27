@@ -16,9 +16,9 @@ export function mapBidPage(page: Page, now = Date.now()) {
   const props = page.properties;
   const result: Record<string, string | number | null> = { id: page.id };
   result.공고명 = text(props['공고명'], 'title');
-  for (const name of ['공고기관', '공고번호', '적용낙찰률', '낙찰업체', '참가가능지역', '면허조건', '참가검토', '공고차수', '가격모델', '추천상태', '추천근거', '가격자료출처', '가격기준시점', '가격비교범위']) result[name] = text(props[name], 'rich_text');
+  for (const name of ['공고기관', '공고번호', '적용낙찰률', '낙찰업체', '참가가능지역', '면허조건', '참가검토', '공고차수', '가격모델', '추천상태', '추천근거', '가격자료출처', '가격기준시점', '가격비교범위', '업무분류', '결과확인', '결과출처']) result[name] = text(props[name], 'rich_text');
   for (const name of ['지역', '상태', '입찰방법', '예가방법']) result[name] = (props[name]?.select as { name?: string } | null)?.name ?? '';
-  for (const name of ['배정예산', '추천입찰가', '낙찰하한가', '실제낙찰금액', '실제낙찰률', '기초금액', '가격사례수']) {
+  for (const name of ['배정예산', '추천입찰가', '낙찰하한가', '실제낙찰금액', '실제낙찰률', '기초금액', '가격사례수', '사례참고가']) {
     const value = props[name]?.number;
     result[name] = typeof value === 'number' && Number.isFinite(value) ? value : null;
   }
@@ -28,13 +28,18 @@ export function mapBidPage(page: Page, now = Date.now()) {
   const closing = String(result.마감일 || '');
   const deadline = Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(closing) ? closing + 'T23:59:59.999+09:00' : closing);
   if (result.상태 === '공고중' && Number.isFinite(deadline) && deadline < now) result.상태 = '마감';
-  // 모델·상태·사례수가 맞지 않으면 과거 숫자를 새 추천처럼 표시하지 않는다.
-  const validPrice = result.가격모델 === 'basis-final-v1' && result.추천상태 === '사례기반 참고' &&
-    Number(result.가격사례수) >= 10 && Number(result.추천입찰가) > 0;
-  if (!validPrice) {
-    result.추천입찰가 = null; result.낙찰하한가 = null; result.적용낙찰률 = '';
-    result.추천상태 = '추천 보류';
-    result.추천근거 = result.추천근거 || '새 기준의 가격 근거 확인 필요';
+  // 2026-10-27: 기존 중앙값은 투찰 추천으로 검증되지 않았다. 원자료는 DB에 보존한다.
+  const validReference = result.가격모델 === 'basis-reference-v2' && Number(result.가격사례수) >= 10 && Number(result.사례참고가) > 0;
+  result.사례참고가 = validReference ? result.사례참고가 : null;
+  result.추천입찰가 = null; result.낙찰하한가 = null; result.적용낙찰률 = '';
+  result.추천상태 = '추천 보류';
+  if (result.가격모델 !== 'basis-reference-v2') result.추천근거 = '기존 사례 중앙값의 투찰 추천 성능 미검증 · 재검토 필요';
+  result.추천근거 = result.추천근거 || '가격 근거 확인 필요';
+  const finalConfirmed = result.결과확인 === '최종낙찰 확인' && result.결과출처 === 'getScsbidListSttusServc';
+  if (!finalConfirmed) {
+    result.기존결과금액 = result.실제낙찰금액;
+    result.실제낙찰금액 = null; result.실제낙찰률 = null; result.낙찰업체 = '';
+    if (['낙찰', '유찰'].includes(String(result.상태))) result.상태 = '결과확인필요';
   }
   result.공고URL = typeof props['공고URL']?.url === 'string' ? props['공고URL'].url : '';
   return result;
