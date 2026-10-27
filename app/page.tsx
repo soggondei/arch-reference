@@ -371,7 +371,10 @@ function ChangwonView(props: {
   agencyTypeFilter: AgencyType | '전체';
   onAgencyTypeFilter: (a: AgencyType | '전체') => void;
 }) {
-  const changwonBids = props.bids.filter(classifyChangwon).map(bid => gyeongnamScope(bid) === '확인 필요' ? { ...bid, 참가검토: '경남 참가 가능 여부 확인 필요 · 지역조건 자료 미확인' } : bid);
+  const [includeUnverified, setIncludeUnverified] = useState(false);
+  const scopeBids = props.bids.filter(classifyChangwon);
+  const unverifiedCount = scopeBids.filter(bid => gyeongnamScope(bid) === '확인 필요').length;
+  const changwonBids = scopeBids.filter(bid => includeUnverified || gyeongnamScope(bid) === '해당').map(bid => gyeongnamScope(bid) === '확인 필요' ? { ...bid, 참가검토: '경남 참가 가능 여부 확인 필요 · 지역조건 자료 미확인' } : bid);
 
   let 참가완료 = 0, 낙찰 = 0, 패찰 = 0, 결과대기 = 0;
   changwonBids.forEach(bid => {
@@ -390,7 +393,9 @@ function ChangwonView(props: {
       {props.loaded && !props.error && (
         <div className="mb-4 text-sm text-zinc-600 bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-3">
           <p className="mb-2 font-semibold">용역 · 건축설계 · 경상남도</p>
-          <p className="mb-2 text-xs">경남 소재 사무소 참가 대상(전국 허용 포함) · 시·군 제한과 추가자격 확인 필요 · 지역조건 미확인 {changwonBids.filter(b => gyeongnamScope(b) === '확인 필요').length}건</p>
+          <p className="mb-2 text-xs">경남 소재 사무소 참가 대상(전국 허용 포함) · 시·군 제한과 추가자격 확인 필요</p>
+          <label className="mb-2 flex items-center gap-2 text-xs"><input type="checkbox" checked={includeUnverified} onChange={e => setIncludeUnverified(e.target.checked)} />참가지역 미확인 후보도 보기 ({unverifiedCount}건)</label>
+          <p className="mb-2 text-xs">전체 수집 목록 최신 공고일: {props.bids.map(b => b.공고일).filter(Boolean).sort().at(-1) || '없음'} · 화면은 5분마다 새로고침</p>
           대상 공고 <span className="font-semibold text-zinc-900">{changwonBids.length}건</span>
           {' · '}참가완료 <span className="font-semibold text-zinc-900">{참가완료}건</span>
           {' '}(낙찰 {낙찰} · 패찰 {패찰} · 결과대기 {결과대기})
