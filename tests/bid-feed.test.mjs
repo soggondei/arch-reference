@@ -41,13 +41,20 @@ test('저장된 공고중 상태는 한국시간 실제 마감으로 보정하�
 
 test('구 추천가나 보류 건의 남은 숫자를 웹에 추천으로 노출하지 않음',()=>{
  const p=page('A');p.properties.추천입찰가={number:40000000};p.properties.낙찰하한가={number:39000000};
- const b=mapBidPage(p);assert.equal(b.추천입찰가,null);assert.equal(b.추천상태,'추천 보류');assert.ok(b.추천근거);
+ const b=mapBidPage(p);assert.equal(b.추천입찰가,null);assert.equal(b.추천상태,'금액 정보 필요');assert.ok(b.추천근거);
 });
-test('근거가 확인된 추천의 금액·사례수·기초금액·사유를 함께 전달',()=>{
+test('이전 보류 상태를 무시하고 공개 금액과 현재 근거로 재계산한다',()=>{
  const p=page('A');const rich=s=>({rich_text:[{plain_text:s}]});
- Object.assign(p.properties,{가격모델:rich('basis-final-v1'),추천상태:rich('사례기반 참고'),추천근거:rich('전국 동일 금액대 최종낙찰 42건'),가격사례수:{number:42},추천입찰가:{number:42277363},기초금액:{number:48000000}});
- const b=mapBidPage(p);assert.equal(b.추천입찰가,null);assert.equal(b.가격사례수,42);assert.equal(b.기초금액,48000000);
- p.properties.추천상태=rich('추천 보류');assert.equal(mapBidPage(p).추천입찰가,null);
+ Object.assign(p.properties,{가격모델:rich('basis-final-v1'),추천상태:rich('추천 보류'),추천입찰가:{number:1},기초금액:{number:48000000},낙찰하한율:{number:88}});
+ const b=mapBidPage(p);assert.ok(b.추천입찰가>40000000);assert.equal(b.가격모델,'bid-guidance-v3');assert.ok(!b.추천상태.includes('보류'));assert.equal(b.기초금액,48000000);
+});
+test('과거 마감에는 미래 사례를 사용하지 않고 예산과 기초금액을 구분한다',()=>{
+ const p=page('A');Object.assign(p.properties,{배정예산:{number:48000000},마감일:{date:{start:'2020-01-01'}}});
+ const b=mapBidPage(p);assert.equal(b.가격사례수,0);assert.equal(b.추천입찰가,48000000);assert.match(b.추천근거,/예산 기준 임시/);assert.equal(b.기초금액,null);
+});
+test('설계공모 용역비는 가격 투찰 추천과 구분한다',()=>{
+ const p=page('A');p.properties.공고명={title:[{plain_text:'청사 설계공모'}]};p.properties.배정예산={number:30000000};
+ const b=mapBidPage(p);assert.equal(b.공고설계비,30000000);assert.equal(b.추천입찰가,null);assert.equal(b.추천상태,'공고 설계비');
 });
 test('최종낙찰 출처가 검증된 경우에만 실제낙찰로 노출한다',()=>{
  const p=page('A');const rich=s=>({rich_text:[{plain_text:s}]});
@@ -55,4 +62,8 @@ test('최종낙찰 출처가 검증된 경우에만 실제낙찰로 노출한다
  assert.equal(mapBidPage(p).실제낙찰금액,null);assert.equal(mapBidPage(p).낙찰업체,'');assert.equal(mapBidPage(p).기존결과금액,41674533);
  Object.assign(p.properties,{결과확인:rich('최종낙찰 확인'),결과출처:rich('getScsbidListSttusServc')});
  assert.equal(mapBidPage(p).실제낙찰금액,41674533);assert.equal(mapBidPage(p).상태,'낙찰');
+});
+test('수집기가 새 사례로 계산한 v3 추천은 과거 웹 사례로 덮어쓰지 않는다',()=>{
+ const p=page('A');const rich=s=>({rich_text:[{plain_text:s}]});Object.assign(p.properties,{가격모델:rich('bid-guidance-v3'),가격기준시점:rich('2026-10-27'),추천상태:rich('사례 기반 추천'),추천입찰가:{number:42001000},가격사례수:{number:20}});
+ const b=mapBidPage(p,Date.parse('2026-10-27T12:00:00+09:00'));assert.equal(b.추천입찰가,42001000);assert.equal(b.가격사례수,20);assert.equal(b.사례자료기준,'수집기 갱신 자료');
 });
