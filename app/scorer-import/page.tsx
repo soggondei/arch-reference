@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo, useRef } from 'react';
 import { Reference, RefType, Collection, CompetitionData } from '@/lib/types';
 import { COLLECTION_COLORS } from '@/lib/tags';
 import { addRef, generateId, getRefs, getCollections, addCollection } from '@/lib/store';
-import { ScorerImportItem } from '@/app/api/scorer-import/route';
+import type { ScorerImportItem } from '@/app/api/scorer-import/route';
 import Link from 'next/link';
 
 interface ImportState {
@@ -159,6 +159,7 @@ export default function ScorerImportPage() {
   const [states, setStates] = useState<Record<number, ImportState>>({});
   const [total, setTotal] = useState(0);
   const [nextPage, setNextPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<{ loaded: number; total: number } | null>(null);
   const [error, setError] = useState('');
@@ -224,16 +225,19 @@ export default function ScorerImportPage() {
         setItems([]);
         setStates({});
         setFilters(INIT_FILTER);
+        setNextPage(startPage);
+        setHasMore(false);
       }
 
       let accumulated: ScorerImportItem[] = isInitial ? [] : [...itemsRef.current];
       let sitemapTotal = 0;
       const endPage = startPage + BATCH_PAGES - 1;
+      let followingPage = startPage;
 
       for (let p = startPage; p <= endPage; p++) {
         const res = await fetch(`/api/scorer-import?page=${p}&pageUnit=${PAGE_UNIT}`);
         const data = await res.json();
-        if (!res.ok) { if (p === startPage) throw new Error(data.error || '로드 실패'); break; }
+        if (!res.ok) throw new Error(data.error || '로드 실패');
 
         if (p === startPage || sitemapTotal === 0) {
           sitemapTotal = data.total;
@@ -246,15 +250,20 @@ export default function ScorerImportPage() {
           addedStates[item.id] = { checked: true, saved: existingUrls.has(item.sourceUrl) };
         }
 
-        accumulated = [...accumulated, ...newItems];
+        const seen = new Set(accumulated.map(item => item.id));
+        accumulated = [...accumulated, ...newItems.filter(item => !seen.has(item.id))]
+          .sort((a, b) => b.announcementDate.localeCompare(a.announcementDate) || b.id - a.id);
         syncedSetItems([...accumulated]);
         setStates(prev => ({ ...prev, ...addedStates }));
         setProgress({ loaded: accumulated.length, total: Math.min(sitemapTotal, endPage * PAGE_UNIT) });
 
-        if (newItems.length < PAGE_UNIT) break;
+        setHasMore(data.hasMore);
+        followingPage = p + 1;
+        setNextPage(followingPage);
+        if (!data.hasMore) break;
       }
 
-      setNextPage(endPage + 1);
+      setNextPage(followingPage);
     } catch (err) {
       setError(err instanceof Error ? err.message : '불러오기 실패');
     } finally {
@@ -357,7 +366,6 @@ export default function ScorerImportPage() {
   }
 
   const checkedCount = filtered.filter(item => states[item.id]?.checked && !states[item.id]?.saved).length;
-  const hasMore = total > 0 && items.length < total;
 
   return (
     <div className="min-h-screen bg-zinc-50">
@@ -381,7 +389,7 @@ export default function ScorerImportPage() {
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
           <p className="text-xs text-zinc-500 leading-relaxed">
-            <span className="font-semibold text-zinc-700">scorer.co.kr</span> 최신 공모전 100건씩 불러옵니다.
+            <span className="font-semibold text-zinc-700">scorer.co.kr</span> 공고일 최신순으로 공모전 100건씩 불러옵니다.
             불러온 항목 전체에 필터를 적용할 수 있으며, 더 불러오기로 추가 항목을 쌓을 수 있습니다.
             페이지당 약 10~20초 소요됩니다.
           </p>
