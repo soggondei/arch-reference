@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { autoTag } from '@/lib/auto-tag';
+import { createScorerListLoader, type ScorerListEntry } from '@/lib/scorer-list';
 import { RefType, JudgeMember, CompetitionFile } from '@/lib/types';
 
 function parseFilesFromHtml(html: string): CompetitionFile[] {
@@ -73,35 +74,7 @@ export interface ScorerImportItem {
   lastmod: string;
 }
 
-interface SitemapEntry {
-  id: number;
-  lastmod: string;
-}
-
-let sitemapCache: { items: SitemapEntry[]; fetchedAt: number } | null = null;
-
-async function getSitemapItems(): Promise<SitemapEntry[]> {
-  const now = Date.now();
-  if (sitemapCache && now - sitemapCache.fetchedAt < 3_600_000) {
-    return sitemapCache.items;
-  }
-  const res = await fetch('https://scorer.co.kr/sitemap.xml', {
-    headers: { 'User-Agent': 'Mozilla/5.0' },
-    signal: AbortSignal.timeout(15000),
-  });
-  if (!res.ok) throw new Error(`sitemap HTTP ${res.status}`);
-  const xml = await res.text();
-
-  const items: SitemapEntry[] = [];
-  const re = /<loc>https:\/\/scorer\.co\.kr\/competition\/(\d+)<\/loc>[\s\S]*?(?:<lastmod>([^<]+)<\/lastmod>)?/g;
-  let m;
-  while ((m = re.exec(xml)) !== null) {
-    items.push({ id: parseInt(m[1]), lastmod: m[2] || '' });
-  }
-  items.sort((a, b) => b.lastmod.localeCompare(a.lastmod) || b.id - a.id);
-  sitemapCache = { items, fetchedAt: now };
-  return items;
-}
+const getScorerPage = createScorerListLoader();
 
 // <dt>키</dt><dd>값</dd> 쌍을 Map으로 추출
 function parseDtDd(html: string): Map<string, string> {
@@ -156,7 +129,7 @@ function computeStatus(announcementDate: string, submissionDate: string, judgeDa
   return today <= deadline ? '진행' : '완료';
 }
 
-async function fetchItem(entry: SitemapEntry): Promise<ScorerImportItem | null> {
+async function fetchItem(entry: ScorerListEntry): Promise<ScorerImportItem | null> {
   const url = `https://scorer.co.kr/competition/${entry.id}`;
   try {
     const res = await fetch(url, {
@@ -189,7 +162,7 @@ async function fetchItem(entry: SitemapEntry): Promise<ScorerImportItem | null> 
     const architect = clientM ? clientM[1].trim() : '';
 
     // 연도: 공고일에서
-    const announcementDate = fields.get('공고일') || '';
+    const announcementDate = fields.get('공고일') || entry.announcementDate;
     const year = announcementDate.slice(0, 4) || entry.lastmod.slice(0, 4);
 
     // 상태: OG desc의 (상태) 표기가 개편으로 사라져 날짜로 계산 (작품접수 마감일 기준)
@@ -251,18 +224,21 @@ async function fetchItem(entry: SitemapEntry): Promise<ScorerImportItem | null> 
 }
 
 export async function GET(req: NextRequest) {
-  const page = parseInt(req.nextUrl.searchParams.get('page') || '1');
-  const pageUnit = parseInt(req.nextUrl.searchParams.get('pageUnit') || '20');
+  const page = Number(req.nextUrl.searchParams.get('page') || '1');
+  const pageUnit = Number(req.nextUrl.searchParams.get('pageUnit') || '20');
+  if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(pageUnit) || pageUnit < 1 || pageUnit > 100) {
+    return NextResponse.json({ error: '잘못된 페이지 요청입니다.' }, { status: 400 });
+  }
 
   try {
-    const all = await getSitemapItems();
-    const total = all.length;
-    const slice = all.slice((page - 1) * pageUnit, page * pageUnit);
+    const { entries: slice, total, hasMore } = await getScorerPage(page, pageUnit);
 
     const results = await Promise.all(slice.map(fetchItem));
     const items = results.filter(Boolean) as ScorerImportItem[];
 
-    return NextResponse.json({ items, total, page, pageUnit });
+    return NextResponse.json({ items, total, page, pageUnit, hasMore }, {
+      headers: { 'Cache-Control': 'no-store' },
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : '가져오기 실패';
     return NextResponse.json({ error: msg }, { status: 500 });
