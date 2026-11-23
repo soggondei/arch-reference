@@ -2,9 +2,11 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Reference, Collection, CompetitionStatus, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, JudgeMember, ScheduleItem, CompetitionFile } from '@/lib/types';
+import { Reference, Collection, CompetitionData, CompetitionStatus, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, JudgeMember, ScheduleItem, CompetitionFile } from '@/lib/types';
 import { getRefs, getCollections, updateRef, deleteRef, updateCompetitionStatus, archiveRefNotionSchedules } from '@/lib/store';
 import { generateScheduleTemplate } from '@/lib/schedule-template';
+import { autoSyncSchedulesToNotion } from '@/lib/notion-schedule-client';
+import { getDDay, normalizeRegistrationSchedule } from '@/lib/competition-dates';
 import { TAG_LABELS, TagCategory } from '@/lib/tags';
 import TagBadge from '@/components/TagBadge';
 import SimilarPanel from '@/components/SimilarPanel';
@@ -21,15 +23,6 @@ function InfoRow({ label, value }: { label: string; value?: string }) {
       <span className="text-zinc-700">{value}</span>
     </div>
   );
-}
-
-function getDDay(dateStr?: string): number | null {
-  if (!dateStr) return null;
-  const matches = dateStr.match(/\d{4}-\d{2}-\d{2}/g);
-  if (!matches) return null;
-  const deadline = new Date([...matches].sort().pop()! + 'T00:00:00');
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  return Math.ceil((deadline.getTime() - today.getTime()) / 86400000);
 }
 
 function fileExt(name: string): string {
@@ -61,11 +54,18 @@ export default function ReferencePage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  function showSavedCompetition(data: CompetitionData) {
+    setRef(ref => {
+      if (ref?.id !== id || (ref.competitionData?.scheduleRevision ?? 0) > (data.scheduleRevision ?? 0)) return ref;
+      return { ...ref, competitionData: data };
+    });
+  }
+
   async function saveNote() {
     if (!ref_) return;
     const updated = { ...ref_, description: noteValue };
     await updateRef(updated);
-    setRef(updated);
+    setRef(ref => ref?.id === id ? { ...ref, description: updated.description } : ref);
     setEditingNote(false);
   }
 
@@ -92,7 +92,7 @@ export default function ReferencePage() {
     if (!confirm('이 레퍼런스를 삭제하시겠습니까?')) return;
     await deleteRef(id);
     archiveRefNotionSchedules(ref_);
-    router.push('/');
+    router.push(ref_?.competitionData ? '/?tab=competitions' : ref_?.refType === 'link' ? '/?tab=links' : '/?tab=refs');
   }
 
   function startEditingCompetition() {
@@ -115,7 +115,7 @@ export default function ReferencePage() {
   async function saveCompetitionData() {
     if (!ref_?.competitionData) return;
     const parsedJudges = parseJudgesFromText(competitionForm.judgesText || '');
-    const updated = {
+    const updated = normalizeRegistrationSchedule({
       ...ref_.competitionData,
       announcementDate: competitionForm.announcementDate || undefined,
       registrationDate: competitionForm.registrationDate || undefined,
@@ -127,49 +127,25 @@ export default function ReferencePage() {
       location: competitionForm.location || undefined,
       judges: parsedJudges.length > 0 ? parsedJudges : undefined,
       submissions: competitionForm.submissions || undefined,
-    };
-    await updateCompetitionStatus(id, updated);
-    setRef(r => r ? { ...r, competitionData: updated } : r);
+    }, ref_.competitionData.registrationDate);
+    const saved = await updateCompetitionStatus(id, updated, ref_.competitionData);
+    showSavedCompetition(saved);
     setEditingCompetition(false);
   }
 
   async function handleScheduleUpdate(schedules: ScheduleItem[]) {
-    if (!ref_?.competitionData) return;
+    if (!ref_?.competitionData) throw new Error('프로젝트를 찾을 수 없습니다.');
     const updated = { ...ref_.competitionData, schedules };
-    await updateCompetitionStatus(id, updated);
-    setRef(r => r ? { ...r, competitionData: updated } : r);
+    const saved = await updateCompetitionStatus(id, updated, ref_.competitionData);
+    showSavedCompetition(saved);
+    return saved;
   }
 
-  async function autoSyncSchedulesToNotion(projectName: string, schedules: ScheduleItem[]): Promise<ScheduleItem[]> {
-    const results = await Promise.allSettled(
-      schedules.map(item =>
-        fetch('/api/notion-schedule', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            taskName: item.taskName,
-            projectName,
-            category: item.category,
-            status: item.status,
-            endDate: item.endDate,
-            startDate: item.startDate,
-            isMilestone: item.isMilestone,
-          }),
-        }).then(r => r.ok ? r.json() : null)
-      )
-    );
-    return schedules.map((item, i) => {
-      const r = results[i];
-      if (r.status === 'fulfilled' && r.value?.pageId) return { ...item, notionPageId: r.value.pageId as string };
-      return item;
-    });
-  }
 
   async function handleStatusChange(status: CompetitionStatus) {
     if (!ref_?.competitionData) return;
-    let updated = { ...ref_.competitionData, status };
-    await updateCompetitionStatus(id, updated);
-    setRef(r => r ? { ...r, competitionData: updated } : r);
+    let updated = await updateCompetitionStatus(id, { ...ref_.competitionData, status }, ref_.competitionData);
+    showSavedCompetition(updated);
     setShowStatusPicker(false);
 
     if (status === '등록완료' && (!updated.schedules || updated.schedules.length === 0)) {
@@ -180,17 +156,15 @@ export default function ReferencePage() {
         resultDate: updated.resultDate,
       });
       if (schedules.length > 0) {
-        const withSchedules = { ...updated, schedules };
-        await updateCompetitionStatus(id, withSchedules);
-        setRef(r => r ? { ...r, competitionData: withSchedules } : r);
+        const withSchedules = await updateCompetitionStatus(id, { ...updated, schedules }, updated);
+        showSavedCompetition(withSchedules);
         updated = withSchedules;
 
         // Notion 스케줄 자동 동기화
         setNotionSyncMsg('스케줄 Notion 동기화 중...');
         const synced = await autoSyncSchedulesToNotion(ref_.title, schedules);
-        const withNotionIds = { ...updated, schedules: synced };
-        await updateCompetitionStatus(id, withNotionIds);
-        setRef(r => r ? { ...r, competitionData: withNotionIds } : r);
+        const withNotionIds = await updateCompetitionStatus(id, { ...withSchedules, schedules: synced }, { ...withSchedules, schedules });
+        showSavedCompetition(withNotionIds);
         updated = withNotionIds;
       }
     }
@@ -220,9 +194,8 @@ export default function ReferencePage() {
         if (res.ok && data.url) {
           setNotionSyncMsg(`✓ 노션 PROJECT MASTER에 등록됨`);
           if (data.pageId) {
-            const withId = { ...updated, notionPageId: data.pageId };
-            await updateCompetitionStatus(id, withId);
-            setRef(r => r ? { ...r, competitionData: withId } : r);
+            const withId = await updateCompetitionStatus(id, { ...updated, notionPageId: data.pageId }, updated);
+            showSavedCompetition(withId);
           }
         } else {
           setNotionSyncMsg(`노션 등록 실패: ${data.error ?? '알 수 없는 오류'}`);
@@ -276,7 +249,7 @@ export default function ReferencePage() {
       )}
       <header className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-zinc-100">
         <div className="max-w-screen-lg mx-auto px-6 h-14 flex items-center gap-3">
-          <Link href="/" className="text-zinc-400 hover:text-zinc-700 flex items-center gap-1.5 text-sm">
+          <Link href={cd ? '/?tab=competitions' : ref_.refType === 'link' ? '/?tab=links' : '/?tab=refs'} className="text-zinc-400 hover:text-zinc-700 flex items-center gap-1.5 text-sm">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="15 18 9 12 15 6" />
             </svg>

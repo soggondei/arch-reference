@@ -371,7 +371,7 @@ export default function ScorerImportPage() {
     <div className="min-h-screen bg-zinc-50">
       <header className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-zinc-100">
         <div className="max-w-screen-xl mx-auto px-6 h-14 flex items-center gap-4">
-          <Link href="/" className="text-zinc-400 hover:text-zinc-700 flex items-center gap-1.5 text-sm">
+          <Link href="/?tab=competitions" className="text-zinc-400 hover:text-zinc-700 flex items-center gap-1.5 text-sm">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="15 18 9 12 15 6" />
             </svg>

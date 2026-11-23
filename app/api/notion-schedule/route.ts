@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ScheduleCategory, ScheduleStatus } from '@/lib/types';
+import type { ScheduleCategory, ScheduleStatus } from '@/lib/types';
+import { notionClosingDate, notionDate } from '@/lib/competition-dates';
 
 const SCHEDULE_DB_ID = '3929ff7b-382c-8158-bd6d-f88c86625ac3';
 const NOTION_VERSION = '2022-06-28';
@@ -32,6 +33,7 @@ function buildProperties(
   status: ScheduleStatus,
   endDate: string,
   startDate?: string,
+  endTime?: string,
 ) {
   return {
     '태스크명': { title: [{ text: { content: taskName } }] },
@@ -39,7 +41,7 @@ function buildProperties(
     '날짜': {
       date: startDate
         ? { start: startDate, end: endDate }
-        : { start: endDate },
+        : { start: notionDate(endDate, endTime) },
     },
     '상태': { select: { name: STATUS_MAP[status] } },
     '카테고리': { select: { name: CATEGORY_MAP[category] } },
@@ -52,14 +54,14 @@ export async function POST(req: NextRequest) {
   const token = process.env.NOTION_TOKEN;
   if (!token) return NextResponse.json({ error: 'NOTION_TOKEN 미설정' }, { status: 500 });
 
-  const { taskName, projectName, category, status, endDate, startDate, isMilestone } = await req.json() as {
+  const { taskName, projectName, category, status, endDate, startDate, endTime } = await req.json() as {
     taskName: string;
     projectName: string;
     category: ScheduleCategory;
     status: ScheduleStatus;
     endDate: string;
     startDate?: string;
-    isMilestone?: boolean;
+    endTime?: string;
   };
 
   const res = await fetch('https://api.notion.com/v1/pages', {
@@ -67,7 +69,7 @@ export async function POST(req: NextRequest) {
     headers: notionHeaders(token),
     body: JSON.stringify({
       parent: { database_id: SCHEDULE_DB_ID },
-      properties: buildProperties(taskName, projectName, category, status, endDate, startDate),
+      properties: buildProperties(taskName, projectName, category, status, endDate, startDate, endTime),
     }),
   });
 
@@ -82,27 +84,35 @@ export async function PATCH(req: NextRequest) {
   const token = process.env.NOTION_TOKEN;
   if (!token) return NextResponse.json({ error: 'NOTION_TOKEN 미설정' }, { status: 500 });
 
-  const { notionPageId, taskName, projectName, category, status, endDate, startDate, isMilestone } = await req.json() as {
+  const { notionPageId, taskName, projectName, category, status, endDate, startDate, endTime, registrationDate } = await req.json() as {
     notionPageId: string;
+    registrationDate?: string;
     taskName: string;
     projectName: string;
     category: ScheduleCategory;
     status: ScheduleStatus;
     endDate: string;
     startDate?: string;
-    isMilestone?: boolean;
+    endTime?: string;
   };
 
+  const closing = notionClosingDate(registrationDate);
+  if (registrationDate !== undefined && !closing) {
+    return NextResponse.json({ error: '등록 마감일을 확인해 주세요.' }, { status: 400 });
+  }
   const res = await fetch(`https://api.notion.com/v1/pages/${notionPageId}`, {
     method: 'PATCH',
     headers: notionHeaders(token),
     body: JSON.stringify({
-      properties: buildProperties(taskName, projectName, category, status, endDate, startDate),
+      properties: closing ? { '날짜': closing } : buildProperties(taskName, projectName, category, status, endDate, startDate, endTime),
     }),
   });
 
   const data = await res.json();
-  if (!res.ok) return NextResponse.json({ error: data.message || '업데이트 실패', notFound: true }, { status: res.status });
+  if (!res.ok) return NextResponse.json({
+    error: data.message || '업데이트 실패',
+    notFound: res.status === 404 || (res.status === 400 && /archived|in the trash/i.test(data.message ?? '')),
+  }, { status: res.status });
   if (data.in_trash || data.archived) return NextResponse.json({ error: 'page_trashed', notFound: true }, { status: 400 });
 
   return NextResponse.json({ ok: true });
