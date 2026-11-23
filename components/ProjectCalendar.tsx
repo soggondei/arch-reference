@@ -1,12 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import {
   buildCalendarEvents, calendarBounds, calendarMonthDays, eventsInRange, isCalendarDate,
   nearestCalendarDate, shiftCalendar, type CalendarEvent, type CalendarView,
 } from '@/lib/project-calendar';
 import { SCHEDULE_STATUS_LABEL, type Reference } from '@/lib/types';
+import { projectColor } from '@/lib/project-color';
 import { shiftDate, weekBounds } from '@/lib/weekly-report';
 import styles from './ProjectCalendar.module.css';
 
@@ -30,6 +31,27 @@ const numMonth = (day: string) => Number(day.slice(5, 7));
 const dayText = (day: string) => fullDay.format(new Date(day + 'T00:00:00Z'));
 const monthDay = (day: string) => numMonth(day) + '월 ' + numDay(day) + '일';
 const eventKind = (event: CalendarEvent) => event.milestone || event.officialField ? 'milestone' : event.category;
+type ProjectColors = ReadonlyMap<string, string>;
+
+function accent(colors: ProjectColors, projectId: string) {
+  return { '--project-color': colors.get(projectId) } as CSSProperties;
+}
+
+function representedProjects(events: readonly CalendarEvent[]) {
+  return new Map(events.map(event => [event.projectId, event.projectTitle]));
+}
+
+function ProjectMarks({ projects, colors }: { projects: ReadonlyMap<string, string>; colors: ProjectColors }) {
+  if (!projects.size) return null;
+  return <span className={styles.projectMarks} aria-hidden="true">
+    {Array.from(projects, ([id, title]) => <span key={id} title={title} style={accent(colors, id)} />)}
+  </span>;
+}
+
+function dayLabel(day: string, count: number, projectNames?: Iterable<string>) {
+  const names = projectNames ? Array.from(projectNames).join(', ') : '';
+  return dayText(day) + ', 일정 ' + count + '건' + (names && ', ' + names);
+}
 
 function periodTitle(view: CalendarView, date: string, bounds: [string, string]) {
   if (view === 'day') return dayText(date);
@@ -47,16 +69,16 @@ function eventRange(event: CalendarEvent) {
   return event.endTime ? range + ' ' + event.endTime : range;
 }
 
-type EventProps = { event: CalendarEvent; portfolio?: boolean; onOpenTask: Props['onOpenTask'] };
+type EventProps = { event: CalendarEvent; colors: ProjectColors; portfolio?: boolean; onOpenTask: Props['onOpenTask'] };
 
-function EventAction({ event, portfolio, onOpenTask, className, children }: EventProps & {
+function EventAction({ event, colors, portfolio, onOpenTask, className, children }: EventProps & {
   className: string; children: ReactNode;
 }) {
   const name = [event.title, portfolio && event.projectTitle, eventRange(event), event.status && SCHEDULE_STATUS_LABEL[event.status],
     event.taskId ? '업무 열기' : '공모 상세 보기'].filter(Boolean).join(' · ');
   const attrs = {
     className, 'aria-label': name, title: name,
-    'data-kind': eventKind(event), 'data-status': event.status,
+    'data-kind': eventKind(event), 'data-status': event.status, style: accent(colors, event.projectId),
   };
   const taskId = event.taskId;
   return taskId
@@ -64,8 +86,8 @@ function EventAction({ event, portfolio, onOpenTask, className, children }: Even
     : <Link href={'/reference/' + encodeURIComponent(event.projectId)} {...attrs}>{children}</Link>;
 }
 
-function Agenda({ events, date, portfolio, onOpenTask, onCreateTask, dayView }: {
-  events: CalendarEvent[]; date: string; dayView: boolean;
+function Agenda({ events, date, colors, portfolio, onOpenTask, onCreateTask, dayView }: {
+  events: CalendarEvent[]; date: string; dayView: boolean; colors: ProjectColors;
 } & Pick<Props, 'portfolio' | 'onOpenTask' | 'onCreateTask'>) {
   return <section className={styles.agenda} aria-label="선택한 날짜의 일정">
     <header className={styles.agendaHeader}>
@@ -77,11 +99,11 @@ function Agenda({ events, date, portfolio, onOpenTask, onCreateTask, dayView }: 
       const time = endsToday && event.endTime ? event.endTime : event.start !== event.end
         ? (endsToday ? '종료일' : date === event.start ? '시작일' : '기간 중') : '시간 미지정';
       return <li key={event.id}>
-        <EventAction event={event} portfolio={portfolio} onOpenTask={onOpenTask} className={styles.agendaEvent}>
+        <EventAction event={event} colors={colors} portfolio={portfolio} onOpenTask={onOpenTask} className={styles.agendaEvent}>
           <span className={styles.time}>{time}</span>
           <span className={styles.eventMain}>
             <span className={styles.eventName}>{event.title}</span>
-            <span className={styles.eventMeta}>{[portfolio && event.projectTitle, kinds[eventKind(event)], event.start !== event.end && eventRange(event)].filter(Boolean).join(' · ')}</span>
+            <span className={styles.eventMeta}>{[portfolio && event.projectTitle, kinds[event.category], eventKind(event) === 'milestone' && kinds.milestone, event.start !== event.end && eventRange(event)].filter(Boolean).join(' · ')}</span>
           </span>
           <span className={styles.state}>{event.status ? SCHEDULE_STATUS_LABEL[event.status] : '공모 일정'}</span>
           <span className={styles.eventArrow} aria-hidden="true">›</span>
@@ -91,9 +113,9 @@ function Agenda({ events, date, portfolio, onOpenTask, onCreateTask, dayView }: 
   </section>;
 }
 
-type GridProps = { events: CalendarEvent[]; date: string; today: string; onSelect: (date: string) => void };
+type GridProps = { events: CalendarEvent[]; colors: ProjectColors; date: string; today: string; onSelect: (date: string) => void };
 
-function MonthGrid({ events, date, today, onSelect, portfolio }: GridProps & Pick<Props, 'portfolio'>) {
+function MonthGrid({ events, colors, date, today, onSelect, portfolio }: GridProps & Pick<Props, 'portfolio'>) {
   const grid = useRef<HTMLDivElement>(null);
   const keyboardDate = useRef('');
   useEffect(() => {
@@ -119,40 +141,44 @@ function MonthGrid({ events, date, today, onSelect, portfolio }: GridProps & Pic
     <div className={styles.monthCells}>{calendarMonthDays(date).map(day => {
       const items = eventsInRange(events, day);
       const first = items.slice(0, 2);
+      const projects = representedProjects(items);
+      const major = items.some(event => eventKind(event) === 'milestone');
       return <button type="button" key={day} data-day={day} data-outside={day.slice(0, 7) !== date.slice(0, 7)}
         aria-pressed={day === date} aria-current={day === today ? 'date' : undefined} tabIndex={day === date ? 0 : -1}
-        aria-label={dayText(day) + ', 일정 ' + items.length + '건'} className={styles.dayCell}
+        aria-label={dayLabel(day, items.length, portfolio ? projects.values() : undefined) + (major ? ', 주요 일정' : '')} className={styles.dayCell}
         onKeyDown={e => navigateDay(e, day)} onClick={() => onSelect(day)}>
         <span className={styles.dayTop}><span className={styles.dayNumber}>{numDay(day)}</span>
-          {items.length > 0 && <span className={styles.compactCount}>{items.length}</span>}</span>
+          {items.length > 0 && <span className={styles.compactCount} data-major={major}>{items.length}</span>}</span>
         <span className={styles.dayPreview} aria-hidden="true">{first.map(event =>
-          <span className={styles.previewLine} key={event.id} data-kind={eventKind(event)} title={(portfolio ? event.projectTitle + ' · ' : '') + event.title}>{event.title}</span>)}
+          <span className={styles.previewLine} key={event.id} data-kind={eventKind(event)} style={accent(colors, event.projectId)}
+            title={[portfolio && event.projectTitle, event.title, kinds[eventKind(event)]].filter(Boolean).join(' · ')}>{event.title}</span>)}
           {items.length > first.length && <span className={styles.overflow}>+{items.length - first.length}건</span>}
         </span>
-        <span className={styles.mobileDots} aria-hidden="true">{Array.from(new Set(items.map(eventKind))).map(kind =>
-          <i key={kind} data-kind={kind} />)}</span>
+        <ProjectMarks projects={projects} colors={colors} />
       </button>;
     })}</div>
   </div>;
 }
 
-function WeekChart({ events, date, today, onSelect, portfolio, onOpenTask }: GridProps & Pick<Props, 'portfolio' | 'onOpenTask'>) {
+function WeekChart({ events, colors, date, today, onSelect, portfolio, onOpenTask }: GridProps & Pick<Props, 'portfolio' | 'onOpenTask'>) {
   const [start] = calendarBounds('week', date);
   const days = weekdays.map((_, i) => shiftDate(start, i)).filter(isCalendarDate);
   return <section className={styles.weekChart} aria-label="주간 일정표">
     <div className={styles.weekHeader}>
       <span className={styles.weekHeading}>업무 일정 <small>{events.length}건</small></span>
-      <div className={styles.weekAxis}>{days.map((day, i) =>
-        <button type="button" key={day} onClick={() => onSelect(day)} aria-current={day === today ? 'date' : undefined}
-          aria-pressed={date === day} aria-label={dayText(day) + ', 일정 ' + eventsInRange(events, day).length + '건'}>
+      <div className={styles.weekAxis}>{days.map((day, i) => {
+        const daily = eventsInRange(events, day);
+        return <button type="button" key={day} onClick={() => onSelect(day)} aria-current={day === today ? 'date' : undefined}
+          aria-pressed={date === day} aria-label={dayLabel(day, daily.length, portfolio ? representedProjects(daily).values() : undefined)}>
           <span>{weekdays[i]}</span><b>{numDay(day)}</b>
-        </button>)}</div>
+        </button>;
+      })}</div>
     </div>
     {events.length ? <ul>{events.map(event => {
       const left = days.findIndex(day => day >= event.start);
       const right = days.findLastIndex(day => day <= event.end);
-      return <li key={event.id}><EventAction event={event} portfolio={portfolio} onOpenTask={onOpenTask} className={styles.weekEvent}>
-        <span className={styles.weekName}><strong>{event.title}</strong><small>{portfolio ? event.projectTitle : kinds[eventKind(event)]}</small></span>
+      return <li key={event.id}><EventAction event={event} colors={colors} portfolio={portfolio} onOpenTask={onOpenTask} className={styles.weekEvent}>
+        <span className={styles.weekName}><strong>{event.title}</strong><small>{[portfolio && event.projectTitle, kinds[event.category], eventKind(event) === 'milestone' && kinds.milestone].filter(Boolean).join(' · ')}</small></span>
         <span className={styles.weekTrack} aria-hidden="true">
           <span className={styles.weekBar} data-milestone={eventKind(event) === 'milestone' && left === right}
             style={{ gridColumn: (left + 1) + ' / ' + (right + 2) }} />
@@ -162,7 +188,7 @@ function WeekChart({ events, date, today, onSelect, portfolio, onOpenTask }: Gri
   </section>;
 }
 
-function YearGrid({ events, date, today, onSelect }: GridProps) {
+function YearGrid({ events, colors, date, today, onSelect, portfolio }: GridProps & Pick<Props, 'portfolio'>) {
   return <div className={styles.year} role="group" aria-label="연간 달력">{Array.from({ length: 12 }, (_, i) => {
     const month = date.slice(0, 4) + '-' + String(i + 1).padStart(2, '0');
     const first = month + '-01';
@@ -171,26 +197,35 @@ function YearGrid({ events, date, today, onSelect }: GridProps) {
     const milestone = inMonth.find(event => eventKind(event) === 'milestone' && event.end >= start && event.end <= end);
     const jump = month === date.slice(0, 7) ? date : nearestCalendarDate(inMonth, first) ?? first;
     return <button key={month} type="button" className={styles.monthCard} onClick={() => onSelect(jump)}
-      aria-label={date.slice(0, 4) + '년 ' + (i + 1) + '월 열기, 일정 ' + inMonth.length + '건'}>
+      aria-label={[date.slice(0, 4) + '년 ' + (i + 1) + '월 열기', '일정 ' + inMonth.length + '건',
+        portfolio && Array.from(representedProjects(inMonth).values()).join(', ')].filter(Boolean).join(', ')}>
       <span className={styles.monthName}><b>{i + 1}월</b><small>{inMonth.length}건</small></span>
       <span className={styles.miniGrid} aria-hidden="true">
         {weekdays.map(w => <i className={styles.miniWeekday} key={w}>{w}</i>)}
         {calendarMonthDays(first).map(day => {
           if (!day.startsWith(month)) return <i key={day} />;
           const daily = eventsInRange(inMonth, day);
-          return <i key={day} data-has-events={daily.length > 0} data-major={daily.some(event => eventKind(event) === 'milestone')}
-            data-today={day === today}>{numDay(day)}</i>;
+          const projects = representedProjects(daily);
+          return <i key={day} title={dayLabel(day, daily.length, projects.values())} data-has-events={daily.length > 0}
+            data-major={daily.some(event => eventKind(event) === 'milestone')} data-today={day === today}>
+            {numDay(day)}<ProjectMarks projects={projects} colors={colors} />
+          </i>;
         })}
       </span>
-      {milestone && <span className={styles.miniMilestone}>{numDay(milestone.end)}일 · {milestone.title}</span>}
+      {milestone && <span className={styles.miniMilestone} style={accent(colors, milestone.projectId)}
+        title={[milestone.projectTitle, milestone.title].join(' · ')}>{numDay(milestone.end)}일 · {milestone.title}</span>}
     </button>;
   })}</div>;
 }
 
 export default function ProjectCalendar({ projects, portfolio, today, view, date, onNavigate, onOpenTask, onCreateTask }: Props) {
   const events = useMemo(() => buildCalendarEvents(projects), [projects]);
+  const colors = useMemo(() => new Map(projects.map(project => [project.id, projectColor(project)])), [projects]);
   const bounds = calendarBounds(view, date);
   const scoped = eventsInRange(events, ...bounds);
+  const displayedDays = view === 'month' ? calendarMonthDays(date) : undefined;
+  const visibleProjects = portfolio ? representedProjects(displayedDays
+    ? eventsInRange(events, displayedDays[0], displayedDays[displayedDays.length - 1]) : scoped) : undefined;
   const nearest = !scoped.length && nearestCalendarDate(events, date);
   const select = (next: string) => onNavigate(view, next);
   return <section className={styles.calendar} aria-label="프로젝트 캘린더">
@@ -211,16 +246,19 @@ export default function ProjectCalendar({ projects, portfolio, today, view, date
         <input type="date" value={date} aria-label="기준 날짜" min="0001-01-01" max="9999-12-31"
           onChange={e => { if (isCalendarDate(e.target.value)) select(e.target.value); }} />
       </div>
-      <ul className={styles.legend} aria-label="일정 구분">{Object.entries(kinds).map(([key, name]) =>
-        <li key={key} data-kind={key}>{name}</li>)}</ul>
+      <span className={styles.milestoneKey}>주요 일정</span>
     </div>
+    {visibleProjects && visibleProjects.size > 0 && <ul className={styles.legend} aria-label="프로젝트 색상">
+      {projects.filter(project => visibleProjects.has(project.id)).map(project =>
+        <li key={project.id} title={project.title} style={accent(colors, project.id)}>{project.title}</li>)}
+    </ul>}
     {nearest && <div className={styles.nearest}>
       {view === 'month' || view === 'year' ? <span>{view === 'month' ? '이 달' : '이 해'}에 등록된 일정이 없습니다.</span> : null}
       <button type="button" aria-label="가까운 일정으로 이동" onClick={() => select(nearest)}>가까운 일정으로 이동 <span>{nearest} ›</span></button>
     </div>}
-    {view === 'month' && <MonthGrid date={date} today={today} events={events} onSelect={select} portfolio={portfolio} />}
-    {view === 'week' && <WeekChart date={date} today={today} events={scoped} onSelect={select} portfolio={portfolio} onOpenTask={onOpenTask} />}
-    {view === 'year' ? <YearGrid date={date} today={today} events={scoped} onSelect={next => onNavigate('month', next)} /> :
-      <Agenda date={date} dayView={view === 'day'} events={eventsInRange(scoped, date)} portfolio={portfolio} onOpenTask={onOpenTask} onCreateTask={onCreateTask} />}
+    {view === 'month' && <MonthGrid date={date} today={today} events={events} colors={colors} onSelect={select} portfolio={portfolio} />}
+    {view === 'week' && <WeekChart date={date} today={today} events={scoped} colors={colors} onSelect={select} portfolio={portfolio} onOpenTask={onOpenTask} />}
+    {view === 'year' ? <YearGrid date={date} today={today} events={scoped} colors={colors} portfolio={portfolio} onSelect={next => onNavigate('month', next)} /> :
+      <Agenda date={date} dayView={view === 'day'} events={eventsInRange(scoped, date)} colors={colors} portfolio={portfolio} onOpenTask={onOpenTask} onCreateTask={onCreateTask} />}
   </section>;
 }

@@ -3,10 +3,16 @@ import type { CalendarView } from './project-calendar';
 
 export type ProjectSection = 'calendar' | 'schedule' | 'report' | 'references' | 'planning';
 
-export function isWorkspaceProject(ref: Reference) {
+export function isWorkspaceProject(ref: Pick<Reference, 'competitionData'>) {
   const data = ref.competitionData;
   return Boolean(data && (data.workspaceKind || data.status !== '관심' || data.schedules?.length ||
     data.workLogs?.length || data.feedback?.length || data.referenceLinks?.length));
+}
+
+export function isActiveWorkspaceProject(ref: Pick<Reference, 'competitionData'>) {
+  const data = ref.competitionData;
+  return Boolean(data && !data.planning?.archived &&
+    (data.workspaceKind || !['드롭', '탈락', '입선'].includes(data.status)));
 }
 
 export function projectHref(projectId: string, section: ProjectSection = 'schedule', taskId?: string) {

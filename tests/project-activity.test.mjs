@@ -1,13 +1,55 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { applyProjectActivity as apply } from '../lib/project-activity.ts';
+import { registerHooks } from 'node:module';
 import { mergeCompetitionEdit } from '../lib/competition-edits.ts';
+
+const hooks = registerHooks({ resolve(specifier, context, next) {
+  if (specifier === './project-color' || specifier === './workspace-navigation') return next(specifier + '.ts', context);
+  return next(specifier, context);
+} });
+const { applyProjectActivity: apply } = await import('../lib/project-activity.ts');
+const { projectColor, PROJECT_COLORS, suggestedProjectColor } = await import('../lib/project-color.ts');
+hooks.deregister();
 
 const task = { id: 'review', taskName: '평면 검토', category: 'design', status: 'in-progress', endDate: '2026-11-25' };
 const project = { status: '작업중', schedules: [task] };
 const log = { id: 'log', taskId: task.id, taskName: task.taskName, date: '2026-11-23', minutes: 75, author: '설계팀', body: '피난 동선 검토' };
 const feedback = { id: 'feedback', taskId: task.id, taskName: task.taskName, date: '2026-11-24', author: '검토자', body: '동선 폭 확인', workLogId: log.id };
 const followUp = { ...task, id: 'follow', taskName: '복도 폭 수정', assignee: '설계팀' };
+
+test('stable legacy colors, distinct suggestions, and balanced reuse on the active calendar', () => {
+  const first = { id: '공모-A', competitionData: project };
+  const fallback = projectColor(first);
+  assert.equal(projectColor({ ...first, title: '변경', competitionData: { ...project, status: '드롭' } }), fallback);
+  assert.equal(projectColor({ ...first, competitionData: { ...project, projectColor: 'bad' } }), fallback);
+  const assigned = [];
+  for (let i = 0; i < PROJECT_COLORS.length; i++) {
+    const next = { id: 'project-' + i, competitionData: project };
+    const color = suggestedProjectColor(next, assigned);
+    assigned.push({ ...next, competitionData: { ...project, projectColor: color } });
+  }
+  assert.equal(new Set(assigned.map(projectColor)).size, PROJECT_COLORS.length);
+  const archived = assigned.map((ref, index) => index === 0
+    ? { ...ref, competitionData: { ...ref.competitionData, planning: { archived: true } } } : ref);
+  assert.equal(suggestedProjectColor(first, archived), projectColor(archived[0]));
+  assert.equal(suggestedProjectColor(first, [first]), fallback);
+  assert.equal(suggestedProjectColor(assigned[2], []), projectColor(assigned[2]));
+});
+
+test('color edits validate the palette, merge independent work, and reject a conflicting color revision', () => {
+  const [first, second, third] = PROJECT_COLORS.map(color => color.value);
+  const change = { type: 'projectColor', value: first };
+  const saved = apply(project, change);
+  assert.equal(saved.schedules, project.schedules);
+  assert.equal(saved.projectColor, first);
+  assert.equal(apply(saved, change), saved);
+  const withTask = mergeCompetitionEdit(saved, project, { ...project, schedules: [followUp] });
+  const edited = apply(withTask, { ...change, previous: first, value: second });
+  assert.equal(edited.schedules[0].id, followUp.id);
+  assert.throws(() => apply(edited, { ...change, previous: first, value: third }), /변경/);
+  assert.throws(() => apply(edited, { ...change, previous: second, value: 'url(https://example.com)' }), /색상/);
+  assert.equal(project.projectColor, undefined);
+});
 
 test('work log additions preserve unrelated records, and a lost response can be retried', () => {
   const first = apply(project, { type: 'saveLog', log });

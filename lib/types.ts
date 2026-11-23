@@ -149,6 +149,7 @@ export interface ProjectReferenceLink {
 
 export type ProjectActivityChange =
   | PlanningChange
+  | { type: 'projectColor'; value: string; previous?: string }
   | { type: 'deliverable'; taskId: string; id: string; value?: TaskDeliverable; previous?: TaskDeliverable }
   | { type: 'drawing'; feedbackId: string; field: 'reviewedDrawing' | 'resultDrawing'; value?: DrawingRecord; previous?: DrawingRecord }
   | { type: 'saveLog'; log: WorkLog; previous?: WorkLog }
@@ -159,6 +160,7 @@ export type ProjectActivityChange =
 
 export interface CompetitionData {
   planning?: ProjectPlan;
+  projectColor?: string;
   status: CompetitionStatus;
   workspaceKind?: 'project' | 'office';
   pm?: string;

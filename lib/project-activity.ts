@@ -1,4 +1,5 @@
 import type { CompetitionData, DrawingRecord, ProjectActivityChange, ScheduleItem, TaskDeliverable, TaskFeedback, WorkLog } from './types';
+import { updateProjectColor } from './project-color';
 
 function requireDate(value: string) {
   const millis = Date.parse(value);
@@ -153,6 +154,7 @@ function createFollowUp(data: CompetitionData, feedbackId: string, input: Schedu
 
 export function applyProjectActivity(data: CompetitionData, change: Exclude<ProjectActivityChange, { type: 'planning' }>): CompetitionData {
   switch (change.type) {
+    case 'projectColor': return updateProjectColor(data, change.value, change.previous);
     case 'deliverable': return updateDeliverable(data, change);
     case 'drawing': return updateDrawing(data, change);
     case 'saveLog': return saveLog(data, change.log, change.previous);
