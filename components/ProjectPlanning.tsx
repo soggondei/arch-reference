@@ -4,6 +4,7 @@ import { useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { durationLabel } from '@/lib/weekly-report';
 import { projectHref } from '@/lib/workspace-navigation';
+import { ProjectColorDot } from './ProjectColorPicker';
 import { phaseSummary, phasesFor, suggestedPhase, type Closeout, type Outcome, type PlanningChange } from '@/lib/project-planning';
 import type { CompetitionData, ProjectActivityChange, Reference, WorkLog } from '@/lib/types';
 import styles from './ProjectPlanning.module.css';
@@ -139,7 +140,7 @@ function PastReviews({projects,exclude}: {projects:Reference[];exclude:string}) 
   return <details className={styles.assign}><summary>다른 프로젝트 회고 찾기 ({entries.length})</summary>
     <label className={styles.search}>회고 검색<input type="search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="프로젝트명·중단 이유·재사용 자료" /></label>
     {found.map(({project,review})=><article className={styles.review} key={project.id+'/'+review.id}>
-      <Link href={projectHref(project.id,'planning')}>{project.title}</Link><p>{review.day} · {review.outcome}{review.minutes!==null&&' · '+durationLabel(review.minutes)}</p>
+      <Link href={projectHref(project.id,'planning')}><ProjectColorDot project={project} />{project.title}</Link><p>{review.day} · {review.outcome}{review.minutes!==null&&' · '+durationLabel(review.minutes)}</p>
       <p>{review.reason}</p>{review.lesson&&<p>{review.lesson}</p>}{review.reusable&&<p>재사용할 자료 · {review.reusable}</p>}
     </article>)}
     {!found.length&&<p>검색 결과가 없습니다.</p>}

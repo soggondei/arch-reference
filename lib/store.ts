@@ -6,6 +6,8 @@ import { mergeCompetitionEdit, recordTaskCompletions } from './competition-edits
 import { attendanceDate } from './attendance';
 import { applyProjectActivity } from './project-activity';
 import { applyPlanning, trackCompetitionTransition } from './project-planning';
+import { suggestedProjectColor } from './project-color';
+import { isWorkspaceProject } from './workspace-navigation';
 
 // ── Row mappers ─────────────────────────────────────────────────────────────
 
@@ -66,7 +68,9 @@ function refRow(ref: Reference) {
 }
 
 export async function addRef(ref: Reference): Promise<void> {
-  const { error } = await supabase.from('refs').insert(refRow(ref));
+  const next = ref.competitionData && !ref.competitionData.projectColor && isWorkspaceProject(ref)
+    ? { ...ref, competitionData: await assignProjectColor(ref.id, ref.competitionData) } : ref;
+  const { error } = await supabase.from('refs').insert(refRow(next));
   if (error) throw error;
 }
 
@@ -88,14 +92,39 @@ export async function updateRef(updated: Reference): Promise<void> {
   if (error) throw error;
 }
 
-async function editCompetition(id: string, edit: (current: CompetitionData) => CompetitionData): Promise<Reference> {
+async function assignProjectColor(id: string, competitionData: CompetitionData): Promise<CompetitionData> {
+  const existing: Pick<Reference, 'id' | 'competitionData'>[] = [];
+  const pageSize = 200;
+  // Select only the color and active/archived markers of workspace projects.
+  const scope = ['competition_data->>workspaceKind.not.is.null', 'competition_data->>status.neq.관심',
+    ...['schedules', 'workLogs', 'feedback', 'referenceLinks'].map(key => 'competition_data->' + key + '->0.not.is.null')].join(',');
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabase.from('refs')
+      .select('id,projectColor:competition_data->>projectColor,status:competition_data->>status,workspaceKind:competition_data->>workspaceKind,archived:competition_data->planning->archived')
+      .or(scope).order('id').range(offset, offset + pageSize - 1);
+    if (error) throw error;
+    for (const row of data ?? []) {
+      existing.push({ id: row.id, competitionData: {
+        status: row.status as CompetitionData['status'], projectColor: row.projectColor,
+        workspaceKind: row.workspaceKind as CompetitionData['workspaceKind'], planning: { archived: row.archived === true },
+      } });
+    }
+    if (!data || data.length < pageSize) break;
+  }
+  return { ...competitionData, projectColor: suggestedProjectColor({ id, competitionData }, existing) };
+}
+
+async function editCompetition(id: string, edit: (current: CompetitionData) => CompetitionData, newOfficeRecord = false): Promise<Reference> {
   for (let attempt = 0; attempt < 5; attempt++) {
     const { data: row, error: readError } = await supabase.from('refs').select('*').eq('id', id).single();
     if (readError) throw readError;
     const ref = toRef(row);
     if (!ref.competitionData) throw new Error('프로젝트를 찾을 수 없습니다.');
     const edited = normalizeRegistrationSchedule(edit(ref.competitionData));
-    const next = recordTaskCompletions(ref.competitionData, edited, attendanceDate(new Date()));
+    let next = recordTaskCompletions(ref.competitionData, edited, attendanceDate(new Date()));
+    if (!next.projectColor && (newOfficeRecord || (!isWorkspaceProject(ref) && isWorkspaceProject({ competitionData: next })))) {
+      next = await assignProjectColor(id, next);
+    }
     if (JSON.stringify(next) === JSON.stringify(row.competition_data)) return ref;
 
     const revision = ref.competitionData.scheduleRevision;
@@ -183,9 +212,7 @@ async function insertOfficeRecord(ref: Reference) {
 export async function createOfficeProject(title: string, pm: string | undefined, id: string): Promise<Reference> {
   if (!title.trim()) throw new Error('프로젝트명을 입력해 주세요.');
   await insertOfficeRecord(officeProject(id, title.trim(), 'project', pm));
-  const { data, error } = await supabase.from('refs').select('*').eq('id', id).single();
-  if (error) throw error;
-  return toRef(data);
+  return editCompetition(id, current => current, true);
 }
 
 export async function addOfficeTask(projectId: string | null, task: ScheduleItem): Promise<Reference> {
@@ -198,7 +225,7 @@ export async function addOfficeTask(projectId: string | null, task: ScheduleItem
     const schedules = current.schedules ?? [];
     if (schedules.some(item => item.id === task.id)) return current;
     return { ...current, schedules: [...schedules, task].sort((a, b) => a.endDate.localeCompare(b.endDate)) };
-  });
+  }, projectId === null);
 }
 
 export async function deleteRef(id: string): Promise<void> {

@@ -7,12 +7,14 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEv
 import { isDroppedCompetition, SCHEDULE_CATEGORY_LABEL, SCHEDULE_STATUS_LABEL } from '@/lib/types';
 import type { OfficeSchedulePatch, ProjectActivityChange, Reference, ScheduleCategory, ScheduleItem, ScheduleStatus, TaskDates } from '@/lib/types';
 import ProjectCalendar from './ProjectCalendar';
+import ProjectColorPicker, { ProjectColorDot } from './ProjectColorPicker';
+import { projectColorName } from '@/lib/project-color';
 import { isCalendarDate, isOfficialCalendarTask, type CalendarView } from '@/lib/project-calendar';
 import ProjectWeeklyReport from './ProjectWeeklyReport';
 import ProjectPlanning from './ProjectPlanning';
 import { useProjectSharedLogs } from '@/lib/project-shared-work';
 import ReferenceConnections from './ReferenceConnections';
-import { calendarHref, isWorkspaceProject, projectHref, type ProjectSection } from '@/lib/workspace-navigation';
+import { calendarHref, isActiveWorkspaceProject as activeProject, isWorkspaceProject, projectHref, type ProjectSection } from '@/lib/workspace-navigation';
 import { weekBounds } from '@/lib/weekly-report';
 import styles from './OfficeWorkspace.module.css';
 
@@ -75,12 +77,6 @@ function openTask(task: ScheduleItem) {
 function overdue(task: ScheduleItem, today: string, time: string) {
   return openTask(task) && (task.endDate < today ||
     (task.endDate === today && Boolean(task.endTime && task.endTime < time)));
-}
-
-function activeProject(project: Reference) {
-  if (project.competitionData?.planning?.archived) return false;
-  return Boolean(project.competitionData?.workspaceKind) ||
-    (!isDroppedCompetition(project.competitionData) && !['탈락', '입선'].includes(project.competitionData?.status ?? ''));
 }
 
 function projectKind(project: Reference) {
@@ -183,7 +179,7 @@ function CalendarTaskDetail({ row, member, today, update, onActivity, onOpenTask
   useEffect(() => { heading.current?.focus(); }, []);
   return <section className={styles.calendarDetail} aria-label="선택한 업무">
     <div className={styles.detailHeading}>
-      <div><small>{row.project.title}</small><h3 ref={heading} tabIndex={-1}>{row.task.taskName}</h3></div>
+      <div><small><ProjectColorDot project={row.project} />{row.project.title}</small><h3 ref={heading} tabIndex={-1}>{row.task.taskName}</h3></div>
       <button type="button" className={styles.secondary} onClick={close}>업무 닫기</button>
     </div>
     <TaskEditor row={row} member={member} update={update} close={close} onSaved={onSaved} />
@@ -230,7 +226,7 @@ function TaskList({ rows, today, time, member, update, notify, onActivity, onOpe
                 aria-expanded={isEditing} onClick={() => setEditing(isEditing ? null : row)}>
                 <span className={styles.taskName}>
                   <strong>{task.taskName}</strong>
-                  <small>{project.title}{dropped && ' · 드롭'} · {SCHEDULE_CATEGORY_LABEL[task.category]} · 일지·피드백</small>
+                  <small><ProjectColorDot project={project} />{project.title}{dropped && ' · 드롭'} · {SCHEDULE_CATEGORY_LABEL[task.category]} · 일지·피드백</small>
                 </span>
                 <span className={styles.deadline} data-late={isLate}>
                   {task.startDate && task.startDate !== task.endDate && <small>{task.startDate} ~ </small>}
@@ -432,7 +428,7 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
         <label>프로젝트 <select aria-label="프로젝트 범위" value={scope} onChange={e => setScope(e.target.value)}>
           <option value="active">진행 프로젝트와 사무소 공통</option>
           <option value="all">모든 프로젝트와 사무소 공통</option>
-          {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+          {projects.map(p => <option key={p.id} value={p.id}>{p.title} · {projectColorName(p)}</option>)}
         </select></label>
       </div>}
       {view === 'office' && <div className={styles.cards}>
@@ -453,20 +449,21 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
           <h2>프로젝트 목록 <small>{projects.length}</small></h2>
           <select aria-label="프로젝트 선택" value={currentProject?.id ?? ''} onChange={e => e.target.value ? navigateProject(e.target.value, section) : goCalendar(undefined, calendarView, selectedDate)}>
             <option value="">진행 프로젝트 전체</option>
-            {projects.map(p => <option value={p.id} key={p.id}>{p.title}</option>)}
+            {projects.map(p => <option value={p.id} key={p.id}>{p.title} · {projectColorName(p)}</option>)}
           </select>
           <div className={styles.projectButtons}>
             <button type="button" aria-pressed={portfolio} onClick={() => goCalendar(undefined, calendarView, selectedDate)}><strong>진행 프로젝트 전체</strong></button>
             {projects.map(p => <button type="button" key={p.id}
             aria-pressed={currentProject?.id === p.id} onClick={() => navigateProject(p.id, section)}>
-            <span>{projectKind(p)}</span><strong>{p.title}</strong>
+            <span>{projectKind(p)}</span><strong><ProjectColorDot project={p} />{p.title}</strong>
           </button>)}</div>
         </aside>}
         <section className={styles.agenda}>
           {portfolio && <div className={styles.projectInfo}><h2>진행 프로젝트 전체</h2><p>진행 중인 프로젝트와 사무소 공통 업무</p></div>}
           {view === 'projects' && currentProject && <div className={styles.projectInfo}>
             <p>{projectKind(currentProject)}{currentProject.competitionData?.pm && ' · PM ' + currentProject.competitionData.pm}</p>
-            <h2>{currentProject.title}</h2>
+            <h2><ProjectColorDot project={currentProject} />{currentProject.title}</h2>
+            <ProjectColorPicker key={currentProject.id} project={currentProject} projects={projects} onActivity={onActivity} />
             {activeProject(currentProject) && <p className={styles.next}>다음 마감 <strong>{nextTask ? nextTask.taskName + ' · ' + dueLabel(nextTask) : '예정 없음'}</strong></p>}
             {!currentProject.competitionData?.workspaceKind && <Link href={'/reference/' + encodeURIComponent(currentProject.id)}>공모 상세 보기 →</Link>}
           </div>}

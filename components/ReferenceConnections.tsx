@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
 import type { ProjectActivityChange, Reference } from '@/lib/types';
 import { isWorkspaceProject, projectHref } from '@/lib/workspace-navigation';
+import { ProjectColorDot } from './ProjectColorPicker';
 import styles from './ReferenceConnections.module.css';
 
 interface Props {
@@ -95,7 +96,7 @@ export default function ReferenceConnections({ context, anchor, refs, onActivity
       const ref = byId.get(link.id);
       return <li key={link.id}>
         <div className={styles.content}>
-          {ref ? <Link href={inProject ? '/reference/' + encodeURIComponent(ref.id) : projectHref(ref.id, 'references')}>{ref.title}</Link>
+          {ref ? <Link href={inProject ? '/reference/' + encodeURIComponent(ref.id) : projectHref(ref.id, 'references')}>{!inProject && <ProjectColorDot project={ref} />}{ref.title}</Link>
             : <strong>원본을 찾을 수 없는 {subject}</strong>}
           {link.note && <p><b>활용 메모</b> · {link.note}</p>}
           {link.decision && <p><b>설계 결정</b> · {link.decision}</p>}
