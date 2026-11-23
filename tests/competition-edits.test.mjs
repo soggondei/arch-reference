@@ -1,6 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mergeCompetitionEdit } from '../lib/competition-edits.ts';
+import { mergeCompetitionEdit, recordTaskCompletions } from '../lib/competition-edits.ts';
+
+test('completion dates follow the change of status and survive retries or reopenings', () => {
+  const initial = {schedules:[{id:'a',status:'planned'},{id:'legacy',status:'done'}]};
+  const done = {...initial,schedules:initial.schedules.map(task=>({...task,status:'done'}))};
+  const saved = recordTaskCompletions(initial,done,'2026-11-23');
+  assert.deepEqual(saved.schedules[0].completedDates,['2026-11-23']);
+  assert.equal(saved.schedules[1].completedDates,undefined);
+  assert.deepEqual(recordTaskCompletions(saved,saved,'2026-11-24'),saved);
+  const reopened = {schedules:[{...saved.schedules[0],status:'in-progress'}]};
+  const again = recordTaskCompletions(reopened,{schedules:[{...reopened.schedules[0],status:'done'}]},'2026-11-26');
+  assert.deepEqual(again.schedules[0].completedDates,['2026-11-23','2026-11-26']);
+});
 
 const print = { id: 'print', taskName: '인쇄물 점검', category: 'admin', status: 'planned', endDate: '2026-11-23' };
 const bind = { ...print, id: 'bind', taskName: '제출물 제본', endDate: '2026-11-25' };

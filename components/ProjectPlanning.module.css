@@ -1,0 +1,31 @@
+.planning { display: grid; gap: 1.25rem; color: #1e302c; }
+.planning section { min-width: 0; border: 1px solid #d5dfda; border-radius: .65rem; padding: clamp(.8rem,2vw,1.2rem); background: white; }
+.planning h3, .planning h4, .form legend { font-weight: 650; }
+.header, .actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; justify-content: space-between; }
+.actions { justify-content: flex-end; }
+.planning p { font-size: .86rem; color: #455b52; margin: .55rem 0; }
+.planning p[role="alert"] { color: #953c28; }
+.planning button { padding: .38rem .7rem; border: 1px solid #bccbc4; border-radius: .38rem; background: white; color: #224b3f; font-size: .82rem; }
+.planning button:disabled { opacity: .55; }
+.planning button[type="submit"] { background: #174d48; color: white; }
+.planning a { color: #17604f; font-size: .85rem; text-decoration: underline; }
+.scroll { overflow-x: auto; }
+.planning table { width: 100%; margin: .75rem 0; border-collapse: collapse; text-align: left; font-size: .86rem; }
+.planning caption { text-align: left; font-size: .75rem; color: #586b62; padding-bottom: .6rem; }
+.planning th, .planning td { padding: .42rem .3rem; border-bottom: 1px solid #dce4df; }
+.planning thead, .planning tfoot { background: #f0f5f1; }
+.planning tbody th { font-weight: 500; }
+.form { background: #f5f8f6; margin-top: .8rem; padding: .9rem; border-radius: .5rem; }
+.form fieldset { min-width: 0; }
+.form label { display: grid; gap: .2rem; min-width: 0; margin: .5rem 0; font-size: .83rem; }
+.form :is(input,select,textarea) { width: 100%; min-width: 0; min-height: 2.4rem; border: 1px solid #aabcb3; border-radius: .35rem; background-color: white; padding: .4rem .55rem; color: #1b3029; }
+.form textarea { resize: vertical; }
+.grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 .75rem; }
+.assign { border-block: 1px solid #d3dfd7; margin: .65rem 0; padding: .5rem 0; }
+.assign summary { cursor: pointer; color: #244f42; }
+.assign label { grid-template-columns: minmax(0,1fr) minmax(7rem,1fr); align-items: center; }
+.search { display: grid; gap: .3rem; font-size: .84rem; margin: .7rem 0; }
+.search input { min-width: 0; background: white; border: 1px solid #aabcb3; border-radius: .35rem; padding: .45rem .55rem; }
+.review { margin-top: .7rem; border-top: 1px solid #d5e0d8; padding-top: .6rem; overflow-wrap: anywhere; }
+.review p { white-space: pre-line; }
+@media(max-width:480px) { .grid { grid-template-columns: 1fr; } .form :is(input,select,textarea) { font-size: 1rem; } }

@@ -34,6 +34,12 @@
 .feedback li { padding: .6rem 0; }
 .action { font-size: .8rem; }
 .empty { padding: .3rem 0; font-size: .82rem; }
+.decisions { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,180px),1fr)); gap: 1rem; margin-top: 1rem; border-block: 1px solid var(--line,#d6e2dc); padding: .85rem 0; }
+.decisions div { min-width: 0; }
+.decisions p, .decisions small, .phaseReview p, .phaseReview small { color: var(--muted,#526763); font-size: .8rem; overflow-wrap: anywhere; }
+.decisions li + li, .phaseReview li + li { margin-top: .35rem; }
+.phaseReview { background: #f5f7f4; margin: .85rem 0; padding: .8rem; border-radius: .45rem; }
+.phaseReview > a { display: inline-block; margin-top: .4rem; }
 @media (max-width: 640px) {
   .report { padding: .85rem; }
   .totals { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem; }

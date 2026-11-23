@@ -26,6 +26,9 @@
 .head input:disabled { background: #f1f4f2; color: #526259; }
 .full { grid-column: 1/-1; }
 .form textarea { resize: vertical; }
+.fields .shareChoice { grid-column: 1/-1; display: flex; align-items: center; gap: .5rem; margin-top: .25rem; }
+.shareChoice input[type="checkbox"] { width: 1.15rem; min-height: 1.15rem; accent-color: #20564c; }
+.addActions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .actions { justify-content: end; margin-top: .6rem; }
 .actions button:not(.primary):not(.secondary), .error button, .full button { color: #245b50; text-decoration: underline; text-underline-offset: .15em; font-size: .78rem; padding: .2rem; }
 .actions span { font-size: .82rem; }

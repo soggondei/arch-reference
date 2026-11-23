@@ -14,11 +14,12 @@ interface Props {
 }
 
 export default function ReferenceConnections({ context, anchor, refs, onActivity }: Props) {
-  const [editing, setEditing] = useState<{ id: string; previousNote: string } | null>(null);
+  const [editing, setEditing] = useState<{ id: string; previousNote: string; previousDecision?: string } | null>(null);
   const [adding, setAdding] = useState(false);
   const [query, setQuery] = useState('');
   const [choice, setChoice] = useState('');
   const [note, setNote] = useState('');
+  const [decision, setDecision] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -26,9 +27,9 @@ export default function ReferenceConnections({ context, anchor, refs, onActivity
   const candidates = refs.filter(r => inProject ? !r.competitionData && r.refType !== 'link' : isWorkspaceProject(r));
   const byId = new Map(candidates.map(r => [r.id, r]));
   const linked = inProject
-    ? (anchor.competitionData?.referenceLinks ?? []).map(link => ({ id: link.referenceId, note: link.note }))
+    ? (anchor.competitionData?.referenceLinks ?? []).map(link => ({ id: link.referenceId, note: link.note, decision: link.decision }))
     : candidates.flatMap(project => (project.competitionData?.referenceLinks ?? [])
-        .filter(link => link.referenceId === anchor.id).map(link => ({ id: project.id, note: link.note })));
+        .filter(link => link.referenceId === anchor.id).map(link => ({ id: project.id, note: link.note, decision: link.decision })));
   const linkedIds = new Set(linked.map(link => link.id));
   const available = candidates.filter(r => !linkedIds.has(r.id));
   const search = query.trim().toLocaleLowerCase('ko');
@@ -37,18 +38,18 @@ export default function ReferenceConnections({ context, anchor, refs, onActivity
   const subject = inProject ? '레퍼런스' : '프로젝트';
 
   function clearEditor() {
-    setAdding(false); setEditing(null); setChoice(''); setQuery(''); setNote('');
+    setAdding(false); setEditing(null); setChoice(''); setQuery(''); setNote(''); setDecision('');
   }
 
-  async function change(id: string, action: 'save' | 'remove', previousNote?: string) {
+  async function change(id: string, action: 'save' | 'remove', previousNote?: string, previousDecision?: string) {
     if (!id || busy) return;
     setBusy(true); setError(''); setMessage('');
     const projectId = inProject ? anchor.id : id;
     const referenceId = inProject ? id : anchor.id;
     try {
       await onActivity(projectId, action === 'save'
-        ? { type: 'linkReference', referenceId, note: note.trim(), previousNote }
-        : { type: 'unlinkReference', referenceId, previousNote });
+        ? { type: 'linkReference', referenceId, note: note.trim(), previousNote, decision, previousDecision }
+        : { type: 'unlinkReference', referenceId, previousNote, previousDecision });
       clearEditor();
       setMessage(action === 'remove' ? '연결을 해제했습니다.' : '연결 정보를 저장했습니다.');
     } catch (e) {
@@ -58,7 +59,7 @@ export default function ReferenceConnections({ context, anchor, refs, onActivity
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    void change(editing?.id ?? choice, 'save', editing?.previousNote);
+    void change(editing?.id ?? choice, 'save', editing?.previousNote, editing?.previousDecision);
   }
 
   return <section className={styles.panel} aria-label={inProject ? '프로젝트 레퍼런스' : '연결된 프로젝트'}>
@@ -78,7 +79,9 @@ export default function ReferenceConnections({ context, anchor, refs, onActivity
           </select></label>
         </> : <strong>{byId.get(editing!.id)?.title ?? '레퍼런스'}</strong>}
         <label>활용 메모 <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
-          maxLength={500} placeholder="예: 중정의 채광 계획을 검토할 때 참고" /></label>
+          maxLength={500} placeholder="예: 시장 방문객과 물류의 동선을 어떻게 분리했는가?" /></label>
+        <label>설계 결정 · 반영 결과 <textarea value={decision} onChange={e => setDecision(e.target.value)} rows={2}
+          maxLength={500} placeholder="예: 방문객 출입구와 물류 진입로를 분리하기로 했다." /></label>
         <div className={styles.buttons}>
           <button type="button" onClick={() => { clearEditor(); setError(''); }}>취소</button>
           <button type="submit" className={styles.primary} disabled={adding && !choice}>{busy ? '저장 중…' : '저장'}</button>
@@ -94,13 +97,15 @@ export default function ReferenceConnections({ context, anchor, refs, onActivity
         <div className={styles.content}>
           {ref ? <Link href={inProject ? '/reference/' + encodeURIComponent(ref.id) : projectHref(ref.id, 'references')}>{ref.title}</Link>
             : <strong>원본을 찾을 수 없는 {subject}</strong>}
-          {link.note && <p>{link.note}</p>}
+          {link.note && <p><b>활용 메모</b> · {link.note}</p>}
+          {link.decision && <p><b>설계 결정</b> · {link.decision}</p>}
         </div>
         <div className={styles.buttons}>
           {ref && <button type="button" disabled={busy || adding || !!editing} onClick={() => {
-            setEditing({ id: link.id, previousNote: link.note }); setNote(link.note); setMessage(''); setError('');
+            setEditing({ id: link.id, previousNote: link.note, previousDecision: link.decision });
+            setNote(link.note); setDecision(link.decision ?? ''); setMessage(''); setError('');
           }}>메모 수정</button>}
-          <button type="button" disabled={busy || adding || !!editing} onClick={() => void change(link.id, 'remove', link.note)}>연결 해제</button>
+          <button type="button" disabled={busy || adding || !!editing} onClick={() => void change(link.id, 'remove', link.note, link.decision)}>연결 해제</button>
         </div>
       </li>;
     })}</ul>
