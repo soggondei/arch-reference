@@ -984,7 +984,7 @@ function BookmarkletHandler({ onPrefill }: { onPrefill: (data: Record<string, st
 }
 
 const NAV_ITEMS = [
-  ['office', '사무소 홈'], ['projects', '프로젝트'], ['tasks', '내 업무'],
+  ['office', '사무소 홈'], ['projects', '프로젝트'], ['tasks', '내 업무'], ['attendance', '직원·근태'],
   ['refs', '레퍼런스'], ['competitions', '공모전'], ['bids', '입찰정보'],
   ['changwon', '경상남도'], ['links', '링크'],
 ] as const;
@@ -995,7 +995,7 @@ export default function Home() {
 
 function WorkspacePage() {
   const searchParams = useSearchParams();
-  const tab = NAV_ITEMS.find(([key]) => key === searchParams.get('tab'))?.[0] ?? 'office';
+  const tab = NAV_ITEMS.find(([key]) => key !== 'attendance' && key === searchParams.get('tab'))?.[0] ?? 'office';
   const section = searchParams.get('section');
   const isOfficeView = tab === 'office' || tab === 'projects' || tab === 'tasks';
   const [refs, setRefs] = useState<Reference[]>([]);
@@ -1403,7 +1403,7 @@ function WorkspacePage() {
           {NAV_ITEMS.map(([key, label]) => {
             const count = key === 'refs' ? regularRefs.length : key === 'competitions' ? competitionRefs.length : key === 'links' ? linkRefs.length : 0;
             return (
-              <Link key={key} href={key === 'office' ? '/' : `/?tab=${key}`} scroll={false}
+              <Link key={key} href={key === 'attendance' ? '/attendance' : key === 'office' ? '/' : `/?tab=${key}`} scroll={key === 'attendance'}
                 aria-current={tab === key ? 'page' : undefined}
                 className={`px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap shrink-0 ${tab === key ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-500 hover:text-zinc-800'}`}>
                 {label}{count > 0 && <span className="ml-1 text-xs text-zinc-400">{count}</span>}
