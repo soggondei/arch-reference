@@ -15,8 +15,17 @@
 .form fieldset { min-width: 0; }
 .form legend { font-weight: 650; margin-bottom: .65rem; }
 .fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .65rem .85rem; }
+.fields label, .head label { display: grid; gap: .28rem; min-width: 0; font-size: .81rem; color: #40554e; font-weight: 600; }
+.journal input, .journal select, .journal textarea {
+  display: block; width: 100%; min-width: 0; min-height: 2.55rem; padding: .45rem .62rem;
+  background-color: white; border: 1px solid #aabbb3; border-radius: .38rem; color: #1e302b;
+  font: inherit; font-size: .94rem; font-weight: 400;
+}
+.journal :is(input, select, textarea):focus-visible { outline: 2px solid #1d6759; outline-offset: 1px; }
+.head input[type="search"] { width: min(100%, 15rem); }
+.head input:disabled { background: #f1f4f2; color: #526259; }
 .full { grid-column: 1/-1; }
-.form textarea { width: 100%; border: 1px solid #bac9c2; border-radius: .38rem; padding: .5rem .62rem; background: white; resize: vertical; font: inherit; }
+.form textarea { resize: vertical; }
 .actions { justify-content: end; margin-top: .6rem; }
 .actions button:not(.primary):not(.secondary), .error button, .full button { color: #245b50; text-decoration: underline; text-underline-offset: .15em; font-size: .78rem; padding: .2rem; }
 .actions span { font-size: .82rem; }
@@ -33,6 +42,9 @@
 .error { font-size: .85rem; color: #92382d; }
 @media(max-width: 480px) {
   .fields { gap: .6rem; }
+  .fields label { grid-column: 1/-1; }
+  .fields label:has(input[type="number"]) { grid-column: auto; }
   .form { padding: .7rem; }
+  .journal input, .journal select, .journal textarea { font-size: 1rem; }
   .summary .head input { width: 100%; }
 }
