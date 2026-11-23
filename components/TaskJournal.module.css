@@ -1,0 +1,39 @@
+.journal { padding: .15rem 1rem .95rem; background: #f3f7f5; color: var(--ink); }
+.journal section { background: var(--paper); padding: .8rem 1rem; border: 1px solid var(--line); border-radius: 7px; margin: .4rem 0; min-width: 0; }
+.head, .meta, .actions, .entryActions { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem .7rem; }
+.head { justify-content: space-between; }
+.head h3 { font-size: .91rem; font-weight: 700; }
+.head small { margin-left: .3rem; font-weight: 500; color: var(--muted); font-size: .75rem; }
+.primary, .secondary { border-radius: 5px; padding: .38rem .62rem; font-size: .79rem; font-weight: 650; }
+.primary { color: white; background: var(--accent); }
+.secondary { border: 1px solid var(--line); background: white; }
+.secondary:hover { background: #edf4f0; }
+.entry { border-top: 1px solid var(--line); padding: .75rem 0 .25rem; margin-top: .65rem; }
+.meta, .empty, .origin small, .entryActions small { color: var(--muted); font-size: .77rem; }
+.meta time { font-variant-numeric: tabular-nums; }
+.meta b { margin-left: auto; font-weight: 650; color: var(--accent); }
+.body, .origin p { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .87rem; line-height: 1.55; margin: .45rem 0; }
+.entryActions button, .origin button { color: var(--accent); font-size: .76rem; text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; text-align: left; }
+.origin { padding: .75rem .85rem; margin: .3rem 0 .7rem; border-left: 3px solid #78a498; background: #e9f1ec; }
+.origin span { font-size: .75rem; color: var(--accent); font-weight: 650; }
+.empty { margin: .4rem 0 .1rem; }
+.quote { border-left: 2px solid #bacbc2; padding-left: .55rem; margin: .45rem 0; font-size: .77rem; color: var(--muted); overflow-wrap: anywhere; white-space: pre-wrap; }
+.form { padding: .75rem; border: 1px solid #c7d8d0; border-radius: 6px; margin-top: .65rem; background: #f7faf8; }
+.form fieldset { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,130px),1fr)); gap: .55rem .7rem; min-width: 0; }
+.form legend { font-size: .85rem; font-weight: 650; margin-bottom: .45rem; }
+.form label, .time > span { display: grid; gap: .22rem; font-size: .76rem; color: var(--muted); }
+.form textarea { width: 100%; min-width: 0; resize: vertical; padding: .5rem .62rem; border: 1px solid #cbd3d2; border-radius: 6px; background: white; color: var(--ink); font-size: .85rem; }
+.form textarea:focus-visible { outline: 2px solid #327d73; outline-offset: 3px; }
+.full, .form .actions, .form .quote, .error { grid-column: 1 / -1; }
+.time > div, .time label { display: flex; align-items: center; gap: .28rem; }
+.time > div { gap: .65rem; margin-top: .22rem; }
+.time input { width: 3.3rem; }
+.actions { justify-content: flex-end; }
+.error, .notice { font-size: .78rem; }
+.error { color: #963b29; }
+.notice { color: var(--accent); margin-top: .4rem; }
+@media (max-width: 620px) {
+  .journal { padding: .1rem .6rem .65rem; }
+  .journal section { padding: .6rem .7rem; }
+  .form { padding: .6rem; }
+}

@@ -1,0 +1,42 @@
+.report { min-width: 0; color: var(--ink, #213b35); padding: 1.1rem; font-size: .88rem; }
+.report h3, .report h4 { font-weight: 650; }
+.report h3 { font-size: 1.12rem; }
+.report h4 { font-size: .91rem; margin-bottom: .6rem; }
+.header, .controls, .recordHead, .action { display: flex; align-items: center; gap: .55rem; flex-wrap: wrap; }
+.header { justify-content: space-between; gap: .8rem; }
+.period, .recordHead small, .action small, .meta, .empty { color: var(--muted, #526763); }
+.period { font-variant-numeric: tabular-nums; margin-top: .17rem; }
+.controls { gap: .3rem; }
+.controls button, .controls input {
+  color: var(--ink, #213b35); font-size: .78rem; background: #fff; border: 1px solid var(--line, #d6e2dc);
+  border-radius: 5px; padding: .35rem .55rem; min-height: 34px;
+}
+.controls button:hover { background: #edf3ef; }
+.controls label { display: flex; align-items: center; gap: .35rem; font-size: .75rem; color: var(--muted, #526763); }
+.report :is(button, input, summary):focus-visible { outline: 2px solid var(--accent, #28625a); outline-offset: 2px; }
+.totals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .7rem; margin: 1rem 0; }
+.totals div { min-width: 0; background: #f0f5f2; padding: .7rem; border-radius: 6px; }
+.totals dt { color: var(--muted, #526763); font-size: .74rem; }
+.totals dd { font-size: 1.08rem; margin-top: .18rem; font-weight: 650; overflow-wrap: anywhere; }
+.breakdown { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.breakdown li { display: flex; align-items: baseline; justify-content: space-between; gap: .6rem; padding: .35rem 0; }
+.breakdown strong { flex-shrink: 0; font-weight: 550; }
+.taskLink { color: var(--accent, #28625a); text-decoration: underline; text-underline-offset: .18em; text-align: left; }
+.taskLink, .recordHead, .body, .action, .breakdown li span { overflow-wrap: anywhere; }
+.daily, .feedback { border-top: 1px solid var(--line, #d6e2dc); margin-top: 1rem; padding-top: .9rem; }
+.daily summary { cursor: pointer; padding: .48rem 0; font-weight: 550; }
+.daily summary span { margin-left: .65rem; color: var(--muted, #526763); font-size: .76rem; font-weight: 400; }
+.daily details + details, .feedback li + li { border-top: 1px solid var(--line, #d6e2dc); }
+.daily li { padding: .5rem .7rem; margin-bottom: .4rem; border-left: 2px solid #cbded6; }
+.recordHead { justify-content: space-between; }
+.recordHead small, .action small, .meta { font-size: .74rem; }
+.body { color: #34423e; margin: .35rem 0; white-space: pre-wrap; }
+.feedback li { padding: .6rem 0; }
+.action { font-size: .8rem; }
+.empty { padding: .3rem 0; font-size: .82rem; }
+@media (max-width: 640px) {
+  .report { padding: .85rem; }
+  .totals { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem; }
+  .breakdown { grid-template-columns: 1fr; gap: .8rem; }
+  .controls button, .controls input { min-height: 40px; }
+}

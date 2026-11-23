@@ -1,9 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState, useSyncExternalStore, type FormEvent } from 'react';
+import TaskJournal from './TaskJournal';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { SCHEDULE_CATEGORY_LABEL, SCHEDULE_STATUS_LABEL } from '@/lib/types';
-import type { OfficeSchedulePatch, Reference, ScheduleCategory, ScheduleItem, ScheduleStatus } from '@/lib/types';
+import type { OfficeSchedulePatch, ProjectActivityChange, Reference, ScheduleCategory, ScheduleItem, ScheduleStatus } from '@/lib/types';
+import ProjectWeeklyReport from './ProjectWeeklyReport';
+import ReferenceConnections from './ReferenceConnections';
+import { isWorkspaceProject, projectHref, type ProjectSection } from '@/lib/workspace-navigation';
+import { weekBounds } from '@/lib/weekly-report';
 import styles from './OfficeWorkspace.module.css';
 
 export type OfficeView = 'office' | 'projects' | 'tasks';
@@ -11,6 +16,10 @@ export type OfficeView = 'office' | 'projects' | 'tasks';
 interface WorkspaceProps {
   view: OfficeView;
   refs: Reference[];
+  routeProject?: string;
+  routeTask?: string;
+  section?: ProjectSection;
+  onActivity: (projectId: string, change: ProjectActivityChange) => Promise<void>;
   onUpdateTask: (refId: string, taskId: string, patch: OfficeSchedulePatch) => Promise<void>;
   onCreateProject: (name: string, pm: string, id: string) => Promise<string>;
   onCreateTask: (projectId: string | null, task: ScheduleItem) => Promise<void>;
@@ -50,14 +59,6 @@ const timeFormatter = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Seoul',
 const dayLabel = new Intl.DateTimeFormat('ko-KR', {
   timeZone: 'UTC', year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
 });
-
-function weekBounds(today: string) {
-  const day = new Date(today + 'T00:00:00Z');
-  day.setUTCDate(day.getUTCDate() - (day.getUTCDay() + 6) % 7);
-  const monday = day.toISOString().slice(0, 10);
-  day.setUTCDate(day.getUTCDate() + 6);
-  return [monday, day.toISOString().slice(0, 10)];
-}
 
 function openTask(task: ScheduleItem) {
   return task.status !== 'done' && task.status !== 'cancelled';
@@ -136,11 +137,18 @@ function TaskEditor({ row, member, update, close, onSaved }: {
   );
 }
 
-function TaskList({ rows, today, time, member, update, notify }: {
+function TaskList({ rows, today, time, member, update, notify, onActivity, onOpenTask, initialTaskId }: {
   rows: TaskRow[]; today: string; time: string; member: string; update: WorkspaceProps['onUpdateTask']; notify: (message: string) => void;
+  onActivity: WorkspaceProps['onActivity']; onOpenTask: (projectId: string, taskId: string) => void; initialTaskId?: string;
 }) {
-  const [editing, setEditing] = useState<TaskRow | null>(null);
-  const [limit, setLimit] = useState(30);
+  const initialIndex = initialTaskId ? rows.findIndex(row => row.task.id === initialTaskId) : -1;
+  const [editing, setEditing] = useState<TaskRow | null>(() => rows[initialIndex] ?? null);
+  const [limit, setLimit] = useState(() => Math.max(30, initialIndex + 1));
+  const initialRow = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    initialRow.current?.scrollIntoView?.({ block: 'center' });
+    initialRow.current?.focus({ preventScroll: true });
+  }, [initialTaskId]);
   if (!rows.length) return <p className={styles.empty}>표시할 일정이 없습니다.</p>;
   return (
     <div className={styles.list}>
@@ -153,10 +161,11 @@ function TaskList({ rows, today, time, member, update, notify }: {
           return (
             <li key={project.id + '/' + task.id}>
               <button type="button" className={styles.taskRow} aria-label={task.taskName + ' 편집, ' + project.title}
+                ref={task.id === initialTaskId ? initialRow : undefined}
                 aria-expanded={isEditing} onClick={() => setEditing(isEditing ? null : row)}>
                 <span className={styles.taskName}>
                   <strong>{task.taskName}</strong>
-                  <small>{project.title} · {SCHEDULE_CATEGORY_LABEL[task.category]}</small>
+                  <small>{project.title} · {SCHEDULE_CATEGORY_LABEL[task.category]} · 일지·피드백</small>
                 </span>
                 <span className={styles.deadline} data-late={isLate}>
                   {task.startDate && task.startDate !== task.endDate && <small>{task.startDate} ~ </small>}
@@ -168,8 +177,11 @@ function TaskList({ rows, today, time, member, update, notify }: {
                   {task.reviewRequested && openTask(task) && <span className={styles.review}>검토 대기</span>}
                 </span>
               </button>
-              {isEditing && <TaskEditor row={editing} member={member} update={update} close={() => setEditing(null)}
-                onSaved={() => { setEditing(null); notify('업무를 저장했습니다.'); }} />}
+              {isEditing && <>
+                <TaskEditor row={editing} member={member} update={update} close={() => setEditing(null)}
+                  onSaved={() => { setEditing(null); notify('업무를 저장했습니다.'); }} />
+                <TaskJournal project={project} task={task} today={today} member={member} onActivity={onActivity} onOpenTask={onOpenTask} />
+              </>}
             </li>
           );
         })}
@@ -238,7 +250,7 @@ function CreateForm({ type, projects, defaultProject, member, createProject, cre
   );
 }
 
-export default function OfficeWorkspace({ view, refs, onUpdateTask, onCreateProject, onCreateTask }: WorkspaceProps) {
+export default function OfficeWorkspace({ view, refs, routeProject, routeTask, section = 'schedule', onActivity, onUpdateTask, onCreateProject, onCreateTask }: WorkspaceProps) {
   const member = useSyncExternalStore(subscribeMember, readMember, () => '');
   const [clock, setClock] = useState(() => new Date());
   const today = dateFormatter.format(clock);
@@ -255,10 +267,7 @@ export default function OfficeWorkspace({ view, refs, onUpdateTask, onCreateProj
   const [form, setForm] = useState<{ view: OfficeView; type: 'task' | 'project' } | null>(null);
   const [notice, setNotice] = useState('');
   const [monday, sunday] = weekBounds(today);
-  const projects = useMemo(() => refs.filter(p => {
-    const data = p.competitionData;
-    return data && (data.workspaceKind || data.status !== '관심' || data.schedules?.length);
-  }).sort((a, b) => {
+  const projects = useMemo(() => refs.filter(isWorkspaceProject).sort((a, b) => {
     const rank = (p: Reference) => p.competitionData?.status === '작업중' ? 0 : activeProject(p) ? 1 : 2;
     return rank(a) - rank(b) || a.title.localeCompare(b.title, 'ko');
   }), [refs]);
@@ -267,7 +276,8 @@ export default function OfficeWorkspace({ view, refs, onUpdateTask, onCreateProj
   ).sort((a, b) => a.task.endDate.localeCompare(b.task.endDate) || (a.task.endTime ?? '').localeCompare(b.task.endTime ?? '')
     || a.task.taskName.localeCompare(b.task.taskName, 'ko')), [projects]);
   const names = [...new Set([member, ...rows.map(row => row.task.assignee), ...projects.map(p => p.competitionData?.pm)].filter(Boolean))] as string[];
-  const currentProject = projects.find(p => projectId === null ? p.competitionData?.workspaceKind === 'office' : p.id === projectId) ?? projects[0];
+  const selectedId = routeProject ?? projectId;
+  const currentProject = projects.find(p => selectedId === null ? p.competitionData?.workspaceKind === 'office' : p.id === selectedId) ?? projects[0];
   const ownershipFilter = ownership ?? (member ? 'mine' : 'unassigned');
   const projectRows = rows.filter(row => row.project.id === currentProject?.id);
   const nextTask = projectRows.find(({ task }) => openTask(task) && !overdue(task, today, time))?.task;
@@ -288,6 +298,10 @@ export default function OfficeWorkspace({ view, refs, onUpdateTask, onCreateProj
   const formType = form?.view === view ? form.type : null;
   const title = view === 'projects' ? '프로젝트 일정' : view === 'office' ? queueLabels[homeQueue] : '업무 목록';
   function openForm(type: 'task' | 'project') { setNotice(''); setForm({ view, type }); }
+  function navigateProject(id: string, nextSection: ProjectSection, taskId?: string) {
+    setFilter(''); setProjectId(id); setForm(null);
+    window.history.pushState(null, '', projectHref(id, nextSection, taskId));
+  }
 
   return (
     <main className={styles.workspace}>
@@ -303,6 +317,10 @@ export default function OfficeWorkspace({ view, refs, onUpdateTask, onCreateProj
         member={view === 'tasks' ? member : ''} createProject={onCreateProject} createTask={onCreateTask} close={() => setForm(null)}
         onCreated={id => {
           setProjectId(id);
+          if (view === 'projects') {
+            if (id) navigateProject(id, 'schedule');
+            else window.history.pushState(null, '', '/?tab=projects');
+          }
           setForm(null); setFilter(''); setScope(id ?? 'all'); setHomeQueue('all'); setOwnership('all');
           setNotice(formType === 'project' ? '프로젝트를 추가했습니다.' : '업무를 추가했습니다.');
         }} />}
@@ -338,11 +356,11 @@ export default function OfficeWorkspace({ view, refs, onUpdateTask, onCreateProj
       <div className={view === 'projects' ? styles.projectLayout : undefined}>
         {view === 'projects' && <aside className={styles.projectPicker} aria-label="프로젝트 선택">
           <h2>프로젝트 목록 <small>{projects.length}</small></h2>
-          <select aria-label="프로젝트 선택" value={currentProject?.id ?? ''} onChange={e => { setProjectId(e.target.value); setFilter(''); }}>
+          <select aria-label="프로젝트 선택" value={currentProject?.id ?? ''} onChange={e => navigateProject(e.target.value, section)}>
             {projects.map(p => <option value={p.id} key={p.id}>{p.title}</option>)}
           </select>
           <div className={styles.projectButtons}>{projects.map(p => <button type="button" key={p.id}
-            aria-pressed={currentProject?.id === p.id} onClick={() => { setProjectId(p.id); setFilter(''); }}>
+            aria-pressed={currentProject?.id === p.id} onClick={() => navigateProject(p.id, section)}>
             <span>{projectKind(p)}</span><strong>{p.title}</strong>
           </button>)}</div>
         </aside>}
@@ -353,12 +371,24 @@ export default function OfficeWorkspace({ view, refs, onUpdateTask, onCreateProj
             <p className={styles.next}>다음 마감 <strong>{nextTask ? nextTask.taskName + ' · ' + dueLabel(nextTask) : '예정 없음'}</strong></p>
             {!currentProject.competitionData?.workspaceKind && <Link href={'/reference/' + encodeURIComponent(currentProject.id)}>공모 상세 보기 →</Link>}
           </div>}
-          <div className={styles.listTitle}>
+          {view === 'projects' && currentProject && <nav className={styles.projectSections} aria-label="프로젝트 상세 메뉴">
+            {([['schedule','업무 일정'], ['report','주간 리포트'], ['references','레퍼런스']] as const).map(([key, label]) =>
+              <Link key={key} href={projectHref(currentProject.id, key)} scroll={false} aria-current={section === key ? 'page' : undefined}>{label}</Link>
+            )}
+          </nav>}
+          {view === 'projects' && currentProject && section === 'report'
+            ? <ProjectWeeklyReport key={currentProject.id} project={currentProject} today={today}
+                onOpenTask={taskId => navigateProject(currentProject.id, 'schedule', taskId)} />
+            : view === 'projects' && currentProject && section === 'references'
+              ? <ReferenceConnections key={currentProject.id} context="project" anchor={currentProject} refs={refs} onActivity={onActivity} />
+              : <><div className={styles.listTitle}>
             <h2>{title} <small>{results.length}</small></h2>
             <input aria-label="일정 검색" type="search" placeholder="업무·프로젝트·담당자 검색" value={filter} onChange={e => setFilter(e.target.value)} />
           </div>
-          <TaskList key={[view, scope, view === 'projects' ? currentProject?.id : '', view === 'office' ? homeQueue : '', ownershipFilter, filter].join('/')}
-            rows={results} today={today} time={time} member={member} update={onUpdateTask} notify={setNotice} />
+          <TaskList key={[view, scope, view === 'projects' ? currentProject?.id : '', view === 'office' ? homeQueue : '', ownershipFilter, filter, routeTask].join('/')}
+            rows={results} today={today} time={time} member={member} update={onUpdateTask} notify={setNotice}
+            onActivity={onActivity} initialTaskId={view === 'projects' && currentProject?.id === routeProject ? routeTask : undefined}
+            onOpenTask={(id, taskId) => navigateProject(id, 'schedule', taskId)} /></>}
         </section>
       </div>
       <p role="status" className={styles.notice}>{notice}</p>

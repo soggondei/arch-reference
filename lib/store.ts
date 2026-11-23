@@ -1,7 +1,8 @@
 import { supabase } from './supabase';
-import type { Reference, Collection, CompetitionData, BidParticipation, OfficeSchedulePatch, ScheduleItem } from './types';
+import type { Reference, Collection, CompetitionData, BidParticipation, OfficeSchedulePatch, ScheduleItem, ProjectActivityChange } from './types';
 import { normalizeRegistrationSchedule } from './competition-dates';
 import { mergeCompetitionEdit } from './competition-edits';
+import { applyProjectActivity } from './project-activity';
 
 // ── Row mappers ─────────────────────────────────────────────────────────────
 
@@ -112,6 +113,16 @@ async function editCompetition(id: string, edit: (current: CompetitionData) => C
 export async function updateCompetitionStatus(id: string, next: CompetitionData, before: CompetitionData): Promise<CompetitionData> {
   const saved = await editCompetition(id, current => mergeCompetitionEdit(current, before, next));
   return saved.competitionData!;
+}
+
+export async function saveProjectActivity(projectId: string, change: ProjectActivityChange): Promise<Reference> {
+  if (change.type === 'linkReference') {
+    const { data, error } = await supabase.from('refs').select('id, ref_type')
+      .eq('id', change.referenceId).is('competition_data', null).maybeSingle();
+    if (error) throw error;
+    if (!data || data.ref_type === 'link') throw new Error('라이브러리에서 연결할 레퍼런스를 찾을 수 없습니다.');
+  }
+  return editCompetition(projectId, current => applyProjectActivity(current, change));
 }
 
 export async function patchOfficeSchedule(id: string, scheduleId: string, patch: OfficeSchedulePatch): Promise<CompetitionData> {

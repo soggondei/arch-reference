@@ -72,6 +72,9 @@
 .projectButtons span, .projectInfo p { color: var(--muted); font-size: .73rem; }
 .projectButtons strong { font-size: .84rem; font-weight: 620; line-height: 1.45; }
 .agenda { overflow: hidden; }
+.projectSections { display: flex; gap: .35rem; padding: 0 1rem; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.projectSections a { padding: .72rem .65rem .6rem; color: var(--muted); font-size: .83rem; font-weight: 600; border-bottom: 2px solid transparent; white-space: nowrap; }
+.projectSections a[aria-current="page"] { color: var(--accent); border-color: var(--accent); }
 .projectInfo { padding: 1.15rem; background: #f1f5f2; border-bottom: 1px solid var(--line); }
 .projectInfo h2 { font-size: 1.3rem; margin: .25rem 0; }
 .projectInfo p.next { margin: .45rem 0; }

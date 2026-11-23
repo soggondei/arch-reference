@@ -1,0 +1,19 @@
+.panel { padding: 1.05rem; color: #243530; min-width: 0; }
+.head, .panel li, .buttons { display: flex; align-items: center; justify-content: space-between; gap: .65rem; }
+.head h3 { font-size: 1rem; font-weight: 650; }
+.head h3 span { margin-left: .3rem; color: #547069; font-size: .8rem; }
+.panel button { padding: .43rem .65rem; border: 1px solid #cfdcd6; border-radius: 6px; font-size: .79rem; background: white; }
+.panel .primary { background: #234d45; color: white; border-color: #234d45; }
+.panel button:disabled { opacity: .48; }
+.panel input, .panel select, .panel textarea { width: 100%; border: 1px solid #bfcec7; border-radius: 5px; background: #fff; padding: .5rem; }
+.form { margin: 1rem 0; background: #f3f7f4; padding: .85rem; border-radius: 6px; }
+.form fieldset { display: grid; gap: .65rem; min-width: 0; }
+.form label { display: grid; gap: .2rem; font-size: .81rem; }
+.buttons { justify-content: flex-end; flex-wrap: wrap; }
+.panel li { padding: .85rem 0; border-bottom: 1px solid #e6ede9; }
+.content { min-width: 0; overflow-wrap: anywhere; }
+.content a { color: #265e51; text-decoration: underline; text-underline-offset: 3px; font-weight: 600; }
+.content p, .empty, .message, .error { font-size: .84rem; margin-top: .55rem; white-space: pre-line; }
+.empty { color: #63736b; padding: .7rem 0; }
+.message { color: #23604d; }.error { color: #9a3b20; }
+@media(max-width: 600px) { .panel li { align-items: start; flex-direction: column; } }
