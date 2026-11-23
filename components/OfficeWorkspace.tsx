@@ -5,12 +5,14 @@ import { AttendanceQuickAction } from './AttendanceWorkspace';
 import TaskJournal from './TaskJournal';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { isDroppedCompetition, SCHEDULE_CATEGORY_LABEL, SCHEDULE_STATUS_LABEL } from '@/lib/types';
-import type { OfficeSchedulePatch, ProjectActivityChange, Reference, ScheduleCategory, ScheduleItem, ScheduleStatus } from '@/lib/types';
+import type { OfficeSchedulePatch, ProjectActivityChange, Reference, ScheduleCategory, ScheduleItem, ScheduleStatus, TaskDates } from '@/lib/types';
+import ProjectCalendar from './ProjectCalendar';
+import { isCalendarDate, isOfficialCalendarTask, type CalendarView } from '@/lib/project-calendar';
 import ProjectWeeklyReport from './ProjectWeeklyReport';
 import ProjectPlanning from './ProjectPlanning';
 import { useProjectSharedLogs } from '@/lib/project-shared-work';
 import ReferenceConnections from './ReferenceConnections';
-import { isWorkspaceProject, projectHref, type ProjectSection } from '@/lib/workspace-navigation';
+import { calendarHref, isWorkspaceProject, projectHref, type ProjectSection } from '@/lib/workspace-navigation';
 import { weekBounds } from '@/lib/weekly-report';
 import styles from './OfficeWorkspace.module.css';
 
@@ -22,10 +24,13 @@ interface WorkspaceProps {
   routeProject?: string;
   routeTask?: string;
   section?: ProjectSection;
+  calendarView?: CalendarView;
+  calendarDate?: string;
+  calendarTaskProject?: string;
   onActivity: (projectId: string, change: ProjectActivityChange) => Promise<void>;
-  onUpdateTask: (refId: string, taskId: string, patch: OfficeSchedulePatch) => Promise<void>;
+  onUpdateTask: (refId: string, taskId: string, patch: OfficeSchedulePatch, previousDates?: TaskDates) => Promise<void>;
   onCreateProject: (name: string, pm: string, id: string) => Promise<string>;
-  onCreateTask: (projectId: string | null, task: ScheduleItem) => Promise<void>;
+  onCreateTask: (projectId: string | null, task: ScheduleItem) => Promise<string>;
 }
 
 type TaskRow = { project: Reference; task: ScheduleItem };
@@ -90,9 +95,13 @@ function dueLabel(task: ScheduleItem) {
 }
 
 function TaskEditor({ row, member, update, close, onSaved }: {
-  row: TaskRow; member: string; update: WorkspaceProps['onUpdateTask']; close: () => void; onSaved: () => void;
+  row: TaskRow; member: string; update: WorkspaceProps['onUpdateTask']; close: () => void; onSaved: (newDate?: string) => void;
 }) {
-  const { task, project } = row;
+  const [{ task, project }] = useState(row);
+  const officialDate = isOfficialCalendarTask(project, task);
+  const [startDate, setStartDate] = useState(task.startDate ?? '');
+  const [endDate, setEndDate] = useState(task.endDate);
+  const [endTime, setEndTime] = useState(task.endTime ?? '');
   const [status, setStatus] = useState(task.status);
   const [assignee, setAssignee] = useState(task.assignee ?? '');
   const [review, setReview] = useState(Boolean(task.reviewRequested));
@@ -105,6 +114,11 @@ function TaskEditor({ row, member, update, close, onSaved }: {
   async function submit(event: FormEvent) {
     event.preventDefault();
     const patch: OfficeSchedulePatch = {};
+    if (!officialDate) {
+      if (startDate !== (task.startDate ?? '')) patch.startDate = startDate || undefined;
+      if (endDate !== task.endDate) patch.endDate = endDate;
+      if (endTime !== (task.endTime ?? '')) patch.endTime = endTime || undefined;
+    }
     if (status !== task.status) patch.status = status;
     if (assignee.trim() !== (task.assignee ?? '')) patch.assignee = assignee.trim();
     if (waiting.trim() !== (task.waitingFor ?? '')) patch.waitingFor = waiting.trim();
@@ -114,10 +128,10 @@ function TaskEditor({ row, member, update, close, onSaved }: {
     setSaving(true);
     setError('');
     try {
-      await update(project.id, task.id, patch);
-      onSaved();
-    } catch {
-      setError('업무를 저장하지 못했습니다. 다시 시도해 주세요.');
+      await update(project.id, task.id, patch, task);
+      onSaved(patch.endDate);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '업무를 저장하지 못했습니다. 다시 시도해 주세요.');
       setSaving(false);
     }
   }
@@ -125,6 +139,11 @@ function TaskEditor({ row, member, update, close, onSaved }: {
   return (
     <form onSubmit={submit} className={styles.editor} aria-label={task.taskName + ' 편집'}>
       <fieldset disabled={saving}>
+        {officialDate ? <p className={styles.officialDate}>공식 일정 · {dueLabel(task)} <Link href={'/reference/' + encodeURIComponent(project.id)}>공모 상세에서 날짜 수정</Link></p> : <>
+          <label>시작일<input type="date" value={startDate} max={endDate} onChange={e => setStartDate(e.target.value)} /></label>
+          <label>마감일<input type="date" required min={startDate || undefined} value={endDate} onChange={e => setEndDate(e.target.value)} /></label>
+          <label>마감 시각<input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} /></label>
+        </>}
         <label>담당자
           <input value={assignee} onChange={e => setAssignee(e.target.value)} placeholder="미배정" list="lv-members" maxLength={80} />
         </label>
@@ -154,6 +173,22 @@ function JournalWithSharedTime(props: React.ComponentProps<typeof TaskJournal>) 
     {shared.error && <p className={styles.error} role="alert">개인 근태에서 공유한 시간이 누계에서 빠져 있습니다. <button type="button" onClick={shared.retry}>다시 불러오기</button></p>}
     <TaskJournal {...props} sharedLogs={shared.logs} />
   </>;
+}
+
+function CalendarTaskDetail({ row, member, today, update, onActivity, onOpenTask, close, onSaved }: {
+  row: TaskRow; member: string; today: string; update: WorkspaceProps['onUpdateTask']; onActivity: WorkspaceProps['onActivity'];
+  onOpenTask: (projectId: string, taskId: string) => void; close: () => void; onSaved: (newDate?: string) => void;
+}) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { heading.current?.focus(); }, []);
+  return <section className={styles.calendarDetail} aria-label="선택한 업무">
+    <div className={styles.detailHeading}>
+      <div><small>{row.project.title}</small><h3 ref={heading} tabIndex={-1}>{row.task.taskName}</h3></div>
+      <button type="button" className={styles.secondary} onClick={close}>업무 닫기</button>
+    </div>
+    <TaskEditor row={row} member={member} update={update} close={close} onSaved={onSaved} />
+    <JournalWithSharedTime project={row.project} task={row.task} today={today} member={member} onActivity={onActivity} onOpenTask={onOpenTask} />
+  </section>;
 }
 
 function ProjectWorkView({ project, relatedProjects, section, today, onActivity, onOpenTask }: {
@@ -222,13 +257,15 @@ function TaskList({ rows, today, time, member, update, notify, onActivity, onOpe
   );
 }
 
-function CreateForm({ type, projects, defaultProject, member, createProject, createTask, onCreated, close }: {
-  type: 'project' | 'task'; projects: Reference[]; defaultProject: string; member: string;
+function CreateForm({ type, projects, defaultProject, defaultDate, member, createProject, createTask, onCreated, close }: {
+  type: 'project' | 'task'; projects: Reference[]; defaultProject: string; defaultDate?: string; member: string;
   createProject: WorkspaceProps['onCreateProject']; createTask: WorkspaceProps['onCreateTask'];
-  onCreated: (projectId: string | null) => void; close: () => void;
+  onCreated: (projectId: string | null, endDate?: string) => void; close: () => void;
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState(defaultDate ?? '');
   const [recordId] = useState(() => crypto.randomUUID());
   const isProject = type === 'project';
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -243,12 +280,13 @@ function CreateForm({ type, projects, defaultProject, member, createProject, cre
       } else {
         const projectId = String(data.get('project') ?? '') || null;
         const task: ScheduleItem = {
-          id: recordId, taskName: name, endDate: String(data.get('date') ?? ''), status: 'planned',
+          id: recordId, taskName: name, startDate: startDate || undefined, endDate, status: 'planned',
+          endTime: String(data.get('endTime') ?? '') || undefined,
           category: data.get('category') as ScheduleCategory,
           assignee: String(data.get('assignee') ?? '').trim() || undefined,
         };
-        await createTask(projectId, task);
-        onCreated(projectId);
+        const savedProjectId = await createTask(projectId, task);
+        onCreated(savedProjectId, endDate);
       }
     } catch {
       setError('저장하지 못했습니다. 다시 시도해 주세요.');
@@ -265,7 +303,9 @@ function CreateForm({ type, projects, defaultProject, member, createProject, cre
             <option value="">사무소 공통</option>
             {projects.filter(p => p.competitionData?.workspaceKind !== 'office').map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
           </select></label>
-          <label>마감일<input name="date" type="date" required /></label>
+          <label>시작일<input name="startDate" type="date" value={startDate} max={endDate || undefined} onChange={e => setStartDate(e.target.value)} /></label>
+          <label>마감일<input name="date" type="date" required value={endDate} min={startDate || undefined} onChange={e => setEndDate(e.target.value)} /></label>
+          <label>마감 시각<input name="endTime" type="time" /></label>
           <label>구분<select name="category" defaultValue="design">
             {Object.entries(SCHEDULE_CATEGORY_LABEL).map(([key, label]) => <option value={key} key={key}>{label}</option>)}
           </select></label>
@@ -281,10 +321,12 @@ function CreateForm({ type, projects, defaultProject, member, createProject, cre
   );
 }
 
-export default function OfficeWorkspace({ view, refs, routeProject, routeTask, section = 'schedule', onActivity, onUpdateTask, onCreateProject, onCreateTask }: WorkspaceProps) {
+export default function OfficeWorkspace({ view, refs, routeProject, routeTask, section = 'calendar', calendarView = 'month', calendarDate,
+  calendarTaskProject, onActivity, onUpdateTask, onCreateProject, onCreateTask }: WorkspaceProps) {
   const member = useSyncExternalStore(subscribeMember, readMember, () => '');
   const [clock, setClock] = useState(() => new Date());
   const today = dateFormatter.format(clock);
+  const selectedDate = calendarDate && isCalendarDate(calendarDate) ? calendarDate : today;
   const time = timeFormatter.format(clock);
   useEffect(() => {
     const timer = window.setInterval(() => setClock(new Date()), 60_000);
@@ -295,7 +337,7 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
   const [homeQueue, setHomeQueue] = useState<Queue>('week');
   const [ownership, setOwnership] = useState<Ownership | null>(null);
   const [filter, setFilter] = useState('');
-  const [form, setForm] = useState<{ view: OfficeView; type: 'task' | 'project' } | null>(null);
+  const [form, setForm] = useState<{ view: OfficeView; type: 'task' | 'project'; date?: string } | null>(null);
   const [notice, setNotice] = useState('');
   const [monday, sunday] = weekBounds(today);
   const projects = useMemo(() => refs.filter(isWorkspaceProject).sort((a, b) => {
@@ -308,7 +350,13 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
     || a.task.taskName.localeCompare(b.task.taskName, 'ko')), [projects]);
   const names = [...new Set([member, ...rows.map(row => row.task.assignee), ...projects.map(p => p.competitionData?.pm)].filter(Boolean))] as string[];
   const selectedId = routeProject ?? projectId;
-  const currentProject = projects.find(p => selectedId === null ? p.competitionData?.workspaceKind === 'office' : p.id === selectedId) ?? projects[0];
+  const isCalendar = view === 'projects' && section === 'calendar';
+  const portfolio = isCalendar && !routeProject;
+  const currentProject = portfolio ? undefined : projects.find(p => selectedId === null ? p.competitionData?.workspaceKind === 'office' : p.id === selectedId)
+    ?? (routeProject ? undefined : projects[0]);
+  const calendarProjects = useMemo(() => portfolio ? projects.filter(activeProject) : currentProject ? [currentProject] : [], [projects, portfolio, currentProject]);
+  const calendarRow = isCalendar && routeTask ? rows.find(({ project, task }) => task.id === routeTask &&
+    project.id === (routeProject ?? calendarTaskProject) && calendarProjects.some(p => p.id === project.id)) : undefined;
   const ownershipFilter = ownership ?? (member ? 'mine' : 'unassigned');
   const projectRows = rows.filter(row => row.project.id === currentProject?.id);
   const nextTask = projectRows.find(({ task }) => openTask(task) && !overdue(task, today, time))?.task;
@@ -330,8 +378,17 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
   const newTaskProject = view === 'projects' ? currentProject : projects.find(p => p.id === scope);
   const formType = form?.view === view ? form.type : null;
   const title = view === 'projects' ? '프로젝트 일정' : view === 'office' ? queueLabels[homeQueue] : '업무 목록';
-  function openForm(type: 'task' | 'project') { setNotice(''); setForm({ view, type }); }
+  function openForm(type: 'task' | 'project', date?: string) { setNotice(''); setForm({ view, type, date }); }
+  function goCalendar(id: string | undefined, period: CalendarView, day: string, task?: { projectId: string; taskId: string }) {
+    setFilter(''); setForm(null); setNotice('');
+    const href = calendarHref(id, period, day, task);
+    if (href !== window.location.pathname + window.location.search) window.history.pushState(null, '', href);
+  }
+  function openCalendarTask(id: string, taskId: string) {
+    goCalendar(routeProject, calendarView, selectedDate, { projectId: id, taskId });
+  }
   function navigateProject(id: string, nextSection: ProjectSection, taskId?: string) {
+    if (nextSection === 'calendar') { goCalendar(id, calendarView, selectedDate); return; }
     setFilter(''); setProjectId(id); setForm(null);
     window.history.pushState(null, '', projectHref(id, nextSection, taskId));
   }
@@ -342,17 +399,21 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
         <div><p className={styles.date}>{dayLabel.format(new Date(today + 'T00:00:00Z'))}</p><h1>{headings[view]}</h1></div>
         <div className={styles.actions}>
           {view === 'projects' && <button className={styles.secondary} onClick={() => openForm('project')}>+ 프로젝트 추가</button>}
-          <button className={styles.primary} onClick={() => openForm('task')}>+ 업무 추가</button>
+          <button className={styles.primary} onClick={() => openForm('task', isCalendar ? selectedDate : undefined)}>+ 업무 추가</button>
         </div>
       </div>
       {view === 'office' && <AttendanceQuickAction />}
-      {formType && <CreateForm key={view + formType} type={formType} projects={projects}
+      {formType && <CreateForm key={[view, formType, form?.date, newTaskProject?.id].join('/')} type={formType} projects={projects} defaultDate={form?.date}
         defaultProject={newTaskProject?.competitionData?.workspaceKind === 'office' ? '' : newTaskProject?.id ?? ''}
         member={view === 'tasks' ? member : ''} createProject={onCreateProject} createTask={onCreateTask} close={() => setForm(null)}
-        onCreated={id => {
+        onCreated={(id, endDate) => {
           setProjectId(id);
           if (view === 'projects') {
-            if (id) navigateProject(id, 'schedule');
+            if (id && isCalendar) {
+              const savedProject = projects.find(p => p.id === id);
+              const stayInPortfolio = portfolio && formType === 'task' && (!savedProject || activeProject(savedProject));
+              goCalendar(stayInPortfolio ? undefined : id, calendarView, endDate ?? selectedDate);
+            } else if (id) navigateProject(id, 'schedule');
             else window.history.pushState(null, '', '/?tab=projects');
           }
           setForm(null); setFilter(''); setScope(id ?? 'all'); setHomeQueue('all'); setOwnership('all');
@@ -390,15 +451,19 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
       <div className={view === 'projects' ? styles.projectLayout : undefined}>
         {view === 'projects' && <aside className={styles.projectPicker} aria-label="프로젝트 선택">
           <h2>프로젝트 목록 <small>{projects.length}</small></h2>
-          <select aria-label="프로젝트 선택" value={currentProject?.id ?? ''} onChange={e => navigateProject(e.target.value, section)}>
+          <select aria-label="프로젝트 선택" value={currentProject?.id ?? ''} onChange={e => e.target.value ? navigateProject(e.target.value, section) : goCalendar(undefined, calendarView, selectedDate)}>
+            <option value="">진행 프로젝트 전체</option>
             {projects.map(p => <option value={p.id} key={p.id}>{p.title}</option>)}
           </select>
-          <div className={styles.projectButtons}>{projects.map(p => <button type="button" key={p.id}
+          <div className={styles.projectButtons}>
+            <button type="button" aria-pressed={portfolio} onClick={() => goCalendar(undefined, calendarView, selectedDate)}><strong>진행 프로젝트 전체</strong></button>
+            {projects.map(p => <button type="button" key={p.id}
             aria-pressed={currentProject?.id === p.id} onClick={() => navigateProject(p.id, section)}>
             <span>{projectKind(p)}</span><strong>{p.title}</strong>
           </button>)}</div>
         </aside>}
         <section className={styles.agenda}>
+          {portfolio && <div className={styles.projectInfo}><h2>진행 프로젝트 전체</h2><p>진행 중인 프로젝트와 사무소 공통 업무</p></div>}
           {view === 'projects' && currentProject && <div className={styles.projectInfo}>
             <p>{projectKind(currentProject)}{currentProject.competitionData?.pm && ' · PM ' + currentProject.competitionData.pm}</p>
             <h2>{currentProject.title}</h2>
@@ -406,11 +471,17 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
             {!currentProject.competitionData?.workspaceKind && <Link href={'/reference/' + encodeURIComponent(currentProject.id)}>공모 상세 보기 →</Link>}
           </div>}
           {view === 'projects' && currentProject && <nav className={styles.projectSections} aria-label="프로젝트 상세 메뉴">
-            {([['schedule','업무 일정'], ['report','주간 리포트'], ['planning','계획·회고'], ['references','레퍼런스']] as const).filter(([key]) => key !== 'planning' || currentProject.competitionData?.workspaceKind !== 'office').map(([key, label]) =>
+            {([['calendar','캘린더'], ['schedule','업무 일정'], ['report','주간 리포트'], ['planning','계획·회고'], ['references','레퍼런스']] as const).filter(([key]) => key !== 'planning' || currentProject.competitionData?.workspaceKind !== 'office').map(([key, label]) =>
               <Link key={key} href={projectHref(currentProject.id, key)} scroll={false} aria-current={section === key ? 'page' : undefined}>{label}</Link>
             )}
           </nav>}
-          {view === 'projects' && currentProject && (section === 'report' || section === 'planning')
+          {isCalendar ? <>{!portfolio && !currentProject ? <p className={styles.empty}>프로젝트를 찾을 수 없습니다. 목록에서 프로젝트를 선택해 주세요.</p> :
+            <ProjectCalendar projects={calendarProjects} portfolio={portfolio} today={today} view={calendarView} date={selectedDate}
+              onNavigate={(period, day) => goCalendar(routeProject, period, day)} onOpenTask={openCalendarTask} onCreateTask={day => openForm('task', day)} />}
+            {calendarRow && <CalendarTaskDetail key={calendarRow.project.id + '/' + calendarRow.task.id} row={calendarRow} member={member} today={today}
+              update={onUpdateTask} onActivity={onActivity} onOpenTask={openCalendarTask} close={() => goCalendar(routeProject, calendarView, selectedDate)}
+              onSaved={day => { goCalendar(routeProject, calendarView, day ?? selectedDate); setNotice('업무를 저장했습니다.'); }} />}</>
+            : view === 'projects' && currentProject && (section === 'report' || section === 'planning')
             ? <ProjectWorkView key={currentProject.id} project={currentProject} relatedProjects={projects} section={section} today={today} onActivity={onActivity}
                 onOpenTask={taskId => navigateProject(currentProject.id, 'schedule', taskId)} />
             : view === 'projects' && currentProject && section === 'references'

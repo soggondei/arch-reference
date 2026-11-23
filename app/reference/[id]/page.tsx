@@ -338,9 +338,11 @@ export default function ReferencePage() {
                   </div>
                 )}
                 {cd && cd.workspaceKind !== 'office' && isWorkspaceProject(ref_) && (
-                  <Link href={projectHref(ref_.id, 'planning')} className="text-xs font-semibold text-emerald-800 underline underline-offset-2">
+                  <><Link href={projectHref(ref_.id, 'calendar')} className="text-xs font-semibold text-emerald-800 underline underline-offset-2">
+                    프로젝트 캘린더
+                  </Link><Link href={projectHref(ref_.id, 'planning')} className="text-xs font-semibold text-emerald-800 underline underline-offset-2">
                     계획·회고
-                  </Link>
+                  </Link></>
                 )}
                 {/* D-days */}
                 {ddayReg !== null && (
