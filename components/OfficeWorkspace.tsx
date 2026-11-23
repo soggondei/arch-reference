@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import TaskJournal from './TaskJournal';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
-import { SCHEDULE_CATEGORY_LABEL, SCHEDULE_STATUS_LABEL } from '@/lib/types';
+import { isDroppedCompetition, SCHEDULE_CATEGORY_LABEL, SCHEDULE_STATUS_LABEL } from '@/lib/types';
 import type { OfficeSchedulePatch, ProjectActivityChange, Reference, ScheduleCategory, ScheduleItem, ScheduleStatus } from '@/lib/types';
 import ProjectWeeklyReport from './ProjectWeeklyReport';
 import ReferenceConnections from './ReferenceConnections';
@@ -71,7 +71,7 @@ function overdue(task: ScheduleItem, today: string, time: string) {
 
 function activeProject(project: Reference) {
   return Boolean(project.competitionData?.workspaceKind) ||
-    !['탈락', '입선'].includes(project.competitionData?.status ?? '');
+    (!isDroppedCompetition(project.competitionData) && !['탈락', '입선'].includes(project.competitionData?.status ?? ''));
 }
 
 function projectKind(project: Reference) {
@@ -157,7 +157,8 @@ function TaskList({ rows, today, time, member, update, notify, onActivity, onOpe
         {rows.slice(0, limit).map(row => {
           const { task, project } = row;
           const isEditing = editing?.task.id === task.id && editing.project.id === project.id;
-          const isLate = overdue(task, today, time);
+          const dropped = isDroppedCompetition(project.competitionData);
+          const isLate = !dropped && overdue(task, today, time);
           return (
             <li key={project.id + '/' + task.id}>
               <button type="button" className={styles.taskRow} aria-label={task.taskName + ' 편집, ' + project.title}
@@ -165,7 +166,7 @@ function TaskList({ rows, today, time, member, update, notify, onActivity, onOpe
                 aria-expanded={isEditing} onClick={() => setEditing(isEditing ? null : row)}>
                 <span className={styles.taskName}>
                   <strong>{task.taskName}</strong>
-                  <small>{project.title} · {SCHEDULE_CATEGORY_LABEL[task.category]} · 일지·피드백</small>
+                  <small>{project.title}{dropped && ' · 드롭'} · {SCHEDULE_CATEGORY_LABEL[task.category]} · 일지·피드백</small>
                 </span>
                 <span className={styles.deadline} data-late={isLate}>
                   {task.startDate && task.startDate !== task.endDate && <small>{task.startDate} ~ </small>}
@@ -174,7 +175,7 @@ function TaskList({ rows, today, time, member, update, notify, onActivity, onOpe
                 <span className={styles.owner}>{task.assignee || '미배정'}</span>
                 <span className={styles.statuses}>
                   <span className={styles.badge} data-status={task.status}>{SCHEDULE_STATUS_LABEL[task.status]}</span>
-                  {task.reviewRequested && openTask(task) && <span className={styles.review}>검토 대기</span>}
+                  {!dropped && task.reviewRequested && openTask(task) && <span className={styles.review}>검토 대기</span>}
                 </span>
               </button>
               {isEditing && <>
@@ -282,11 +283,12 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
   const projectRows = rows.filter(row => row.project.id === currentProject?.id);
   const nextTask = projectRows.find(({ task }) => openTask(task) && !overdue(task, today, time))?.task;
   const scoped = rows.filter(row => scope === 'all' || (scope === 'active' ? activeProject(row.project) : row.project.id === scope));
+  const pending = scoped.filter(({ project, task }) => !isDroppedCompetition(project.competitionData) && openTask(task));
   const byQueue: Record<Queue, TaskRow[]> = {
     all: scoped,
-    week: scoped.filter(({ task }) => openTask(task) && task.endDate >= monday && task.endDate <= sunday),
-    overdue: scoped.filter(({ task }) => overdue(task, today, time)),
-    review: scoped.filter(({ task }) => openTask(task) && task.reviewRequested),
+    week: pending.filter(({ task }) => task.endDate >= monday && task.endDate <= sunday),
+    overdue: pending.filter(({ task }) => overdue(task, today, time)),
+    review: pending.filter(({ task }) => task.reviewRequested),
   };
   const owned = scoped.filter(({ task }) => ownershipFilter === 'all' ||
     (ownershipFilter === 'mine' ? Boolean(member) && task.assignee === member : !task.assignee));
@@ -368,7 +370,7 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
           {view === 'projects' && currentProject && <div className={styles.projectInfo}>
             <p>{projectKind(currentProject)}{currentProject.competitionData?.pm && ' · PM ' + currentProject.competitionData.pm}</p>
             <h2>{currentProject.title}</h2>
-            <p className={styles.next}>다음 마감 <strong>{nextTask ? nextTask.taskName + ' · ' + dueLabel(nextTask) : '예정 없음'}</strong></p>
+            {!isDroppedCompetition(currentProject.competitionData) && <p className={styles.next}>다음 마감 <strong>{nextTask ? nextTask.taskName + ' · ' + dueLabel(nextTask) : '예정 없음'}</strong></p>}
             {!currentProject.competitionData?.workspaceKind && <Link href={'/reference/' + encodeURIComponent(currentProject.id)}>공모 상세 보기 →</Link>}
           </div>}
           {view === 'projects' && currentProject && <nav className={styles.projectSections} aria-label="프로젝트 상세 메뉴">

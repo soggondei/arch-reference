@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Reference, Collection, CompetitionData, CompetitionStatus, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, JudgeMember, ScheduleItem, CompetitionFile } from '@/lib/types';
+import { Reference, Collection, CompetitionData, CompetitionStatus, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, isDroppedCompetition, JudgeMember, ScheduleItem, CompetitionFile } from '@/lib/types';
 import { getRefs, getCollections, updateRef, deleteRef, updateCompetitionStatus, archiveRefNotionSchedules, saveProjectActivity } from '@/lib/store';
 import { generateScheduleTemplate } from '@/lib/schedule-template';
 import { autoSyncSchedulesToNotion } from '@/lib/notion-schedule-client';
@@ -40,6 +40,8 @@ export default function ReferencePage() {
   const [noteValue, setNoteValue] = useState('');
   const [aiMemoLoading, setAiMemoLoading] = useState(false);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [statusError, setStatusError] = useState('');
   const [editingCompetition, setEditingCompetition] = useState(false);
   const [competitionForm, setCompetitionForm] = useState<Record<string, string>>({});
   const [notionSyncMsg, setNotionSyncMsg] = useState<string | null>(null);
@@ -144,12 +146,28 @@ export default function ReferencePage() {
 
 
   async function handleStatusChange(status: CompetitionStatus) {
-    if (!ref_?.competitionData) return;
-    let updated = await updateCompetitionStatus(id, { ...ref_.competitionData, status }, ref_.competitionData);
-    showSavedCompetition(updated);
+    if (!ref_?.competitionData || statusSaving) return;
+    setStatusSaving(true);
+    setStatusError('');
     setShowStatusPicker(false);
+    let statusSaved = false;
+    try {
+      const updated = await updateCompetitionStatus(id, { ...ref_.competitionData, status }, ref_.competitionData);
+      statusSaved = true;
+      showSavedCompetition(updated);
+      if (updated.status === '등록예정' || updated.status === '등록완료') {
+        await syncCompetitionRegistration(ref_, updated);
+      }
+    } catch {
+      setNotionSyncMsg(null);
+      setStatusError(statusSaved ? '공모 상태는 저장했습니다. 일정 동기화를 다시 시도해 주세요.' : '공모 상태를 저장하지 못했습니다. 다시 시도해 주세요.');
+    } finally {
+      setStatusSaving(false);
+    }
+  }
 
-    if (status === '등록완료' && (!updated.schedules || updated.schedules.length === 0)) {
+  async function syncCompetitionRegistration(project: Reference, updated: CompetitionData) {
+    if (updated.status === '등록완료' && (!updated.schedules || updated.schedules.length === 0)) {
       const schedules = generateScheduleTemplate({
         submissionDate: updated.submissionDate,
         registrationDate: updated.registrationDate,
@@ -163,14 +181,15 @@ export default function ReferencePage() {
 
         // Notion 스케줄 자동 동기화
         setNotionSyncMsg('스케줄 Notion 동기화 중...');
-        const synced = await autoSyncSchedulesToNotion(ref_.title, schedules);
+        const synced = await autoSyncSchedulesToNotion(project.title, schedules);
         const withNotionIds = await updateCompetitionStatus(id, { ...withSchedules, schedules: synced }, { ...withSchedules, schedules });
         showSavedCompetition(withNotionIds);
         updated = withNotionIds;
+        setNotionSyncMsg(null);
       }
     }
 
-    if ((status === '등록예정' || status === '등록완료') && !updated.notionPageId) {
+    if (!updated.notionPageId) {
       setNotionSyncMsg('노션 등록 중...');
       try {
         const cd = updated;
@@ -178,8 +197,8 @@ export default function ReferencePage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            title: ref_.title,
-            architect: ref_.architect,
+            title: project.title,
+            architect: project.architect,
             location: cd.location,
             submissionDate: cd.submissionDate,
             registrationDate: cd.registrationDate,
@@ -187,7 +206,7 @@ export default function ReferencePage() {
             resultDate: cd.resultDate,
             designFee: cd.designFee,
             floorArea: cd.floorArea,
-            sourceUrl: ref_.sourceUrl,
+            sourceUrl: project.sourceUrl,
             submissions: cd.submissions,
           }),
         });
@@ -216,8 +235,9 @@ export default function ReferencePage() {
 
   const cardCollections = collections.filter(c => ref_.collectionIds.includes(c.id));
   const cd = ref_.competitionData;
-  const ddayReg = getDDay(cd?.registrationDate);
-  const ddaySub = getDDay(cd?.submissionDate);
+  const dropped = isDroppedCompetition(cd);
+  const ddayReg = dropped ? null : getDDay(cd?.registrationDate);
+  const ddaySub = dropped ? null : getDDay(cd?.submissionDate);
 
   function judgesText(judges: JudgeMember[]): string {
     return judges.map(j => j.affiliation ? `${j.name} (${j.affiliation})` : j.name).join('\n');
@@ -291,6 +311,9 @@ export default function ReferencePage() {
                   <div className="relative">
                     <button
                       onClick={() => setShowStatusPicker(v => !v)}
+                      disabled={statusSaving}
+                      aria-expanded={showStatusPicker}
+                      aria-busy={statusSaving}
                       className="flex items-center gap-1 text-xs font-bold text-white px-2.5 py-1 rounded-full"
                       style={{ backgroundColor: COMPETITION_STATUS_COLOR[cd.status] }}
                     >
@@ -329,6 +352,7 @@ export default function ReferencePage() {
                   </span>
                 )}
               </div>
+              {statusError && <p role="alert" className="mb-2 text-sm text-red-700">{statusError}</p>}
               <h2 className="text-2xl font-bold text-zinc-900 leading-tight">{ref_.title}</h2>
               {(ref_.architect || ref_.year) && (
                 <p className="text-zinc-500 mt-1">{[ref_.architect, ref_.year].filter(Boolean).join(' · ')}</p>

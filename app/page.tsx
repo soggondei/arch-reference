@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Reference, Collection, FilterState, CompetitionStatus, CompetitionData, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, LINK_CATEGORIES, BidParticipation, BidParticipationStatus, BID_PARTICIPATION_STATUSES, BID_PARTICIPATION_STATUS_COLOR } from '@/lib/types';
+import { Reference, Collection, FilterState, CompetitionStatus, CompetitionData, ACTIVE_COMPETITION_STATUSES, COMPETITION_RESULTS, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, isDroppedCompetition, LINK_CATEGORIES, BidParticipation, BidParticipationStatus, BID_PARTICIPATION_STATUSES, BID_PARTICIPATION_STATUS_COLOR } from '@/lib/types';
 import { COLLECTION_COLORS } from '@/lib/tags';
 import { getRefs, getCollections, deleteRef, addCollection, deleteCollection, updateRef, generateId, updateCompetitionStatus, archiveRefNotionSchedules, getBidParticipations, upsertBidParticipation, createOfficeProject, addOfficeTask, patchOfficeSchedule, saveProjectActivity } from '@/lib/store';
 import { autoTag } from '@/lib/auto-tag';
@@ -748,6 +748,7 @@ function CompetitionRow({
       <div className="relative shrink-0">
         <button
           onClick={() => setShowPicker(v => !v)}
+          aria-expanded={showPicker}
           className="flex items-center gap-1 text-xs font-bold text-white px-2.5 py-1 rounded-full whitespace-nowrap"
           style={{ backgroundColor: COMPETITION_STATUS_COLOR[cd.status] }}
         >
@@ -771,11 +772,11 @@ function CompetitionRow({
       </div>
 
       {/* D-days */}
-      <div className="shrink-0 flex flex-col items-end gap-0.5">
+      {!isDroppedCompetition(cd) && <div className="shrink-0 flex flex-col items-end gap-0.5">
         <DDayLabel label="등록" dday={ddayReg} />
         <DDayLabel label="제출" dday={ddaySub} />
         {ddayReg === null && ddaySub === null && <DDayBadge dday={null} />}
-      </div>
+      </div>}
 
       {/* 제목 */}
       <Link href={`/reference/${ref_.id}`} className="flex-1 min-w-0">
@@ -851,9 +852,6 @@ function CompetitionView({
     try { await onAutoFill(); } finally { setFilling(false); }
   }
 
-  const active = COMPETITION_STATUSES.slice(0, 5);
-  const results = COMPETITION_STATUSES.slice(5);
-
   const filtered = refs.filter(r => {
     if (statusFilter && r.competitionData?.status !== statusFilter) return false;
     if (search) {
@@ -864,10 +862,14 @@ function CompetitionView({
   });
 
   const totalFee = refs
-    .filter(r => active.includes(r.competitionData?.status as CompetitionStatus))
+    .filter(r => ACTIVE_COMPETITION_STATUSES.some(status => status === r.competitionData?.status))
     .reduce((sum, r) => sum + (r.competitionData?.designFeeAmount || 0), 0);
 
-  const byStatus = (s: CompetitionStatus) => filtered.filter(r => r.competitionData?.status === s);
+  const groups = [
+    { label: '', statuses: ACTIVE_COMPETITION_STATUSES },
+    { label: '결과', statuses: COMPETITION_RESULTS },
+    { label: '진행 중단', statuses: ['드롭'] },
+  ] as const;
 
   return (
     <div className="flex-1 min-w-0">
@@ -881,17 +883,19 @@ function CompetitionView({
         />
         <button
           onClick={() => setStatusFilter(null)}
+          aria-pressed={statusFilter === null}
           className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${!statusFilter ? 'bg-zinc-900 text-white border-zinc-900' : 'border-zinc-200 text-zinc-500'}`}
         >
           전체 {refs.length}
         </button>
         {COMPETITION_STATUSES.map(s => {
           const cnt = refs.filter(r => r.competitionData?.status === s).length;
-          if (cnt === 0) return null;
+          if (cnt === 0 && s !== '드롭' && s !== statusFilter) return null;
           return (
             <button
               key={s}
               onClick={() => setStatusFilter(statusFilter === s ? null : s)}
+              aria-pressed={statusFilter === s}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all"
               style={statusFilter === s
                 ? { backgroundColor: COMPETITION_STATUS_COLOR[s], color: '#fff', borderColor: COMPETITION_STATUS_COLOR[s] }
@@ -938,34 +942,21 @@ function CompetitionView({
           </Link>
         </div>
       ) : filtered.length === 0 ? (
-        <p className="text-zinc-400 text-sm py-12 text-center">검색 결과가 없습니다</p>
+        <p className="text-zinc-400 text-sm py-12 text-center">
+          {statusFilter === '드롭' && !search ? '드롭한 공모전이 없습니다' : '검색 결과가 없습니다'}
+        </p>
       ) : (
         <div className="flex flex-col gap-6">
-          {/* 진행 중 */}
-          {active.some(s => byStatus(s).length > 0) && (
-            <div className="flex flex-col gap-2">
-              {active.map(s => byStatus(s).length > 0 && (
-                <div key={s}>
-                  {byStatus(s).map(r => (
-                    <div key={r.id} className="mb-2">
-                      <CompetitionRow ref_={r} onStatusChange={onStatusChange} onDelete={onDelete} />
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
-          {/* 결과 */}
-          {results.some(s => byStatus(s).length > 0) && (
-            <div>
-              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">결과</p>
+          {groups.map(({ label, statuses }) => {
+            const rows = statuses.flatMap(status => filtered.filter(r => r.competitionData?.status === status));
+            if (!rows.length) return null;
+            return <div key={statuses[0]}>
+              {label && <h2 className="text-xs font-semibold text-zinc-400 mb-2">{label}</h2>}
               <div className="flex flex-col gap-2">
-                {results.map(s => byStatus(s).map(r => (
-                  <CompetitionRow key={r.id} ref_={r} onStatusChange={onStatusChange} onDelete={onDelete} />
-                )))}
+                {rows.map(r => <CompetitionRow key={r.id} ref_={r} onStatusChange={onStatusChange} onDelete={onDelete} />)}
               </div>
-            </div>
-          )}
+            </div>;
+          })}
         </div>
       )}
     </div>
@@ -1281,7 +1272,8 @@ function WorkspacePage() {
     }
 
     // 4. Notion 스케줄 동기화 (백그라운드 - cd 캡처해서 stale closure 방지)
-    if (cd.schedules && cd.schedules.length > 0) {
+    const resumingWithoutRegistration = isDroppedCompetition(ref.competitionData) && status !== '등록예정' && status !== '등록완료';
+    if (!isDroppedCompetition(cd) && !resumingWithoutRegistration && cd.schedules && cd.schedules.length > 0) {
       const snapshot = cd;
       autoSyncSchedulesToNotion(ref.title, snapshot.schedules!).then(async synced => {
         const withSynced = { ...snapshot, schedules: synced };
