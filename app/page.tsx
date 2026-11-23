@@ -984,7 +984,7 @@ function BookmarkletHandler({ onPrefill }: { onPrefill: (data: Record<string, st
 }
 
 const NAV_ITEMS = [
-  ['office', '사무소 홈'], ['projects', '프로젝트'], ['tasks', '내 업무'], ['attendance', '직원·근태'],
+  ['office', '사무소 홈'], ['projects', '프로젝트'], ['tasks', '내 업무'], ['attendance', '내 근태'],
   ['refs', '레퍼런스'], ['competitions', '공모전'], ['bids', '입찰정보'],
   ['changwon', '경상남도'], ['links', '링크'],
 ] as const;

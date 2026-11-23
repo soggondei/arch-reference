@@ -1,22 +1,11 @@
-export interface AttendanceEmployee {
-  id: string;
-  name: string;
-  email: string;
-  role: 'admin' | 'staff';
-  active: boolean;
-  email_editable: boolean;
-}
-
 export interface AttendanceShift {
   id: string;
-  employee_id: string;
   clock_in: string;
   clock_out: string | null;
 }
 
 export interface AttendanceDashboard {
-  employee: AttendanceEmployee;
-  employees: AttendanceEmployee[];
+  connected: true;
   shifts: AttendanceShift[];
   open_shift: AttendanceShift | null;
 }
