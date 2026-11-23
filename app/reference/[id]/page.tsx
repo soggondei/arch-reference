@@ -3,13 +3,14 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Reference, Collection, CompetitionData, CompetitionStatus, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, JudgeMember, ScheduleItem, CompetitionFile } from '@/lib/types';
-import { getRefs, getCollections, updateRef, deleteRef, updateCompetitionStatus, archiveRefNotionSchedules } from '@/lib/store';
+import { getRefs, getCollections, updateRef, deleteRef, updateCompetitionStatus, archiveRefNotionSchedules, saveProjectActivity } from '@/lib/store';
 import { generateScheduleTemplate } from '@/lib/schedule-template';
 import { autoSyncSchedulesToNotion } from '@/lib/notion-schedule-client';
 import { getDDay, normalizeRegistrationSchedule } from '@/lib/competition-dates';
 import { TAG_LABELS, TagCategory } from '@/lib/tags';
 import TagBadge from '@/components/TagBadge';
 import SimilarPanel from '@/components/SimilarPanel';
+import ReferenceConnections from '@/components/ReferenceConnections';
 import ScheduleSection from '@/components/ScheduleSection';
 import Link from 'next/link';
 
@@ -44,8 +45,8 @@ export default function ReferencePage() {
   const [notionSyncMsg, setNotionSyncMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [refs, cols] = await Promise.all([getRefs(), getCollections()]);
-    const found = refs.find(r => r.id === id) ?? null;
+    const [refs, cols] = await Promise.all([getRefs({ includeOffice: true }), getCollections()]);
+    const found = refs.find(r => r.id === id && !r.competitionData?.workspaceKind) ?? null;
     setRef(found);
     setNoteValue(found?.description ?? '');
     setAllRefs(refs);
@@ -600,10 +601,18 @@ export default function ReferencePage() {
           </div>
         </div>
 
+        {!cd && ref_.refType !== 'link' && <div className="mt-5 rounded-xl border border-zinc-200 bg-white">
+          <ReferenceConnections key={ref_.id} context="reference" anchor={ref_} refs={allRefs}
+            onActivity={async (projectId, change) => {
+              const saved = await saveProjectActivity(projectId, change);
+              setAllRefs(prev => prev.map(row => row.id === saved.id &&
+                (row.competitionData?.scheduleRevision ?? 0) <= (saved.competitionData?.scheduleRevision ?? 0) ? saved : row));
+            }} />
+        </div>}
         {/* 유사 레퍼런스 추천 */}
         <SimilarPanel
           target={ref_}
-          allRefs={allRefs}
+          allRefs={allRefs.filter(r => !r.competitionData?.workspaceKind)}
           collections={collections}
           onRefAdded={() => void load()}
         />

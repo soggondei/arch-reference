@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Reference, Collection, FilterState, CompetitionStatus, CompetitionData, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, LINK_CATEGORIES, BidParticipation, BidParticipationStatus, BID_PARTICIPATION_STATUSES, BID_PARTICIPATION_STATUS_COLOR } from '@/lib/types';
 import { COLLECTION_COLORS } from '@/lib/tags';
-import { getRefs, getCollections, deleteRef, addCollection, deleteCollection, updateRef, generateId, updateCompetitionStatus, archiveRefNotionSchedules, getBidParticipations, upsertBidParticipation, createOfficeProject, addOfficeTask, patchOfficeSchedule } from '@/lib/store';
+import { getRefs, getCollections, deleteRef, addCollection, deleteCollection, updateRef, generateId, updateCompetitionStatus, archiveRefNotionSchedules, getBidParticipations, upsertBidParticipation, createOfficeProject, addOfficeTask, patchOfficeSchedule, saveProjectActivity } from '@/lib/store';
 import { autoTag } from '@/lib/auto-tag';
 import { generateScheduleTemplate } from '@/lib/schedule-template';
 import { autoSyncSchedulesToNotion } from '@/lib/notion-schedule-client';
@@ -1005,6 +1005,7 @@ export default function Home() {
 function WorkspacePage() {
   const searchParams = useSearchParams();
   const tab = NAV_ITEMS.find(([key]) => key === searchParams.get('tab'))?.[0] ?? 'office';
+  const section = searchParams.get('section');
   const isOfficeView = tab === 'office' || tab === 'projects' || tab === 'tasks';
   const [refs, setRefs] = useState<Reference[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -1431,6 +1432,9 @@ function WorkspacePage() {
           !loaded ? <p role="status" className="py-8 text-sm text-zinc-500">업무 일정을 불러오는 중…</p> :
           loadError && !refs.length ? null :
           <OfficeWorkspace view={tab} refs={refs} onUpdateTask={handleUpdateTask} onCreateProject={handleCreateProject}
+            routeProject={searchParams.get('project') ?? undefined} routeTask={searchParams.get('task') ?? undefined}
+            section={section === 'report' || section === 'references' ? section : 'schedule'}
+            onActivity={async (id, change) => { upsertWorkspaceRef(await saveProjectActivity(id, change)); }}
             onCreateTask={async (projectId, task) => { upsertWorkspaceRef(await addOfficeTask(projectId, task)); }} />
         ) : tab === 'refs' ? (
           <>

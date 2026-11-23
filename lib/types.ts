@@ -90,6 +90,39 @@ export interface ScheduleItem {
 
 export type OfficeSchedulePatch = Partial<Pick<ScheduleItem, 'status' | 'assignee' | 'reviewRequested'>>;
 
+export interface WorkLog {
+  id: string;
+  taskId: string;
+  taskName: string;
+  author: string;
+  date: string;
+  minutes: number;
+  body: string;
+}
+
+export interface TaskFeedback {
+  id: string;
+  taskId: string;
+  taskName: string;
+  author: string;
+  date: string;
+  body: string;
+  workLogId?: string;
+  followUpTaskId?: string;
+}
+
+export interface ProjectReferenceLink {
+  referenceId: string;
+  note: string;
+}
+
+export type ProjectActivityChange =
+  | { type: 'saveLog'; log: WorkLog; previous?: WorkLog }
+  | { type: 'addFeedback'; feedback: TaskFeedback }
+  | { type: 'followUp'; feedbackId: string; task: ScheduleItem }
+  | { type: 'linkReference'; referenceId: string; note: string; previousNote?: string }
+  | { type: 'unlinkReference'; referenceId: string; previousNote?: string };
+
 export interface CompetitionData {
   status: CompetitionStatus;
   workspaceKind?: 'project' | 'office';
@@ -111,6 +144,9 @@ export interface CompetitionData {
   submissions?: string;
   notionPageId?: string;
   schedules?: ScheduleItem[];
+  workLogs?: WorkLog[];
+  feedback?: TaskFeedback[];
+  referenceLinks?: ProjectReferenceLink[];
 }
 
 export interface Reference {
