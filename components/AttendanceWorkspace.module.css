@@ -1,9 +1,10 @@
 .page { min-height: 100vh; background: #f6f8f7; color: #1c2927; }
 .siteHeader { background: #fff; border-bottom: 1px solid #dce2df; }
 .siteHeader > div { width: min(100%, 76rem); margin: auto; padding: .95rem clamp(1rem, 3vw, 2.1rem); display: flex; align-items: center; justify-content: space-between; }
-.siteHeader a:first-child { color: #192523; font-size: 1.1rem; font-weight: 760; letter-spacing: -.055em; }
-.siteHeader a:last-child, .inlineLink { color: #20534e; font-weight: 620; font-size: .84rem; }
-.siteHeader a:last-child:hover, .inlineLink:hover, .quickLink:hover { text-decoration: underline; text-underline-offset: .2em; }
+.siteHeader > div > a { color: #192523; font-size: 1.1rem; font-weight: 760; letter-spacing: -.055em; }
+.siteHeader nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
+.siteHeader nav a, .inlineLink { color: #20534e; font-weight: 620; font-size: .84rem; }
+.siteHeader nav a:hover, .inlineLink:hover, .quickLink:hover { text-decoration: underline; text-underline-offset: .2em; }
 .main { max-width: 58rem; margin: auto; padding: clamp(1.4rem, 4vw, 3.1rem) 1rem 4rem; }
 .main h1 { font-size: clamp(1.65rem, 4vw, 2.25rem); font-weight: 740; line-height: 1.15; letter-spacing: -.06em; }
 .panel, .punch { border-radius: .8rem; border: 1px solid #dce2df; background: white; padding: clamp(1rem, 3vw, 1.55rem); margin-top: 1rem; }

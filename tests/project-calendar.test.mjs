@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import test from 'node:test';
 import { weekBounds } from '../lib/weekly-report.ts';
+import { calendarHref, directoryGroupFor, projectDirectoryHref, projectHref, scheduleHref, workspaceSection } from '../lib/workspace-navigation.ts';
 
 const hooks = registerHooks({ resolve(specifier, context, next) {
   if (specifier === './competition-dates') {
@@ -13,6 +14,52 @@ const { buildCalendarEvents, calendarBounds, calendarMonthDays, eventsInRange, i
   isOfficialCalendarTask, nearestCalendarDate, redateOfficialCalendarTasks, shiftCalendar } = await import('../lib/project-calendar.ts');
 const { generateScheduleTemplate } = await import('../lib/schedule-template.ts');
 hooks.deregister();
+
+test('project management defaults to the directory and keeps submitted, terminal and office work distinct', () => {
+  const route = search => {
+    const query = new URLSearchParams(search);
+    return workspaceSection(query.get('tab'), query);
+  };
+  assert.equal(route('tab=projects'), 'directory');
+  assert.equal(route('tab=projects&group=completed'), 'directory');
+  assert.equal(projectDirectoryHref('completed'), '/?tab=projects&group=completed');
+  assert.equal(route('tab=projects&section=calendar'), 'calendar');
+  assert.equal(route('tab=projects&project=p'), 'calendar');
+  assert.equal(route('tab=projects&project=p&task=t'), 'schedule');
+  assert.equal(route('tab=projects&project=p&section=calendar&task=t'), 'calendar');
+  assert.equal(route('tab=schedule'), 'calendar');
+  assert.equal(route('tab=schedule&task=t&taskProject=other'), 'calendar');
+  for (const status of ['등록예정','등록완료','작업중','제출완료']) {
+    assert.equal(directoryGroupFor({competitionData:{status}}), 'active');
+  }
+  for (const status of ['입선','탈락','드롭']) {
+    assert.equal(directoryGroupFor({competitionData:{status}}), 'completed');
+  }
+  assert.equal(directoryGroupFor({competitionData:{status:'관심'}}), null);
+  assert.equal(directoryGroupFor({competitionData:{status:'관심', schedules:[{id:'started'}]}}), 'active');
+  assert.equal(directoryGroupFor({competitionData:{status:'작업중',workspaceKind:'office'}}), null);
+  assert.equal(directoryGroupFor({competitionData:{status:'작업중',workspaceKind:'project'}}), 'active');
+  assert.equal(directoryGroupFor({competitionData:{status:'작업중',workspaceKind:'project',planning:{archived:true}}}), 'completed');
+});
+
+test('the schedule tab retains calendar, list, scope and project-qualified task links independently of project detail', () => {
+  const day = '2026-08-27';
+  const task = { projectId: '세종 & 화성', taskId: '작업/1' };
+  const query = href => Object.fromEntries(new URL(href, 'https://example.test').searchParams);
+  assert.deepEqual(query(scheduleHref(undefined, 'month', day)), { tab: 'schedule', view: 'month', date: day });
+  assert.deepEqual(query(scheduleHref(undefined, 'week', day, 'list', task, 'all')), {
+    tab: 'schedule', layout: 'list', view: 'week', date: day, scope: 'all', task: task.taskId, taskProject: task.projectId,
+  });
+  assert.deepEqual(query(scheduleHref(task.projectId, 'day', day, 'calendar', task, 'all')), {
+    tab: 'schedule', view: 'day', date: day, project: task.projectId, task: task.taskId,
+  });
+  assert.deepEqual(query(calendarHref(undefined, 'week', day, task)), {
+    tab: 'projects', section: 'calendar', view: 'week', date: day, task: task.taskId, taskProject: task.projectId,
+  });
+  assert.deepEqual(query(projectHref(task.projectId, 'schedule', task.taskId)), {
+    tab: 'projects', project: task.projectId, section: 'schedule', task: task.taskId,
+  });
+});
 
 const competition = {
   status: '드롭',

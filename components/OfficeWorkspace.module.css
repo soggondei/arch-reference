@@ -70,6 +70,7 @@
 .projectButtons button:hover { background: #f4f7f5; }
 .projectButtons button[aria-pressed="true"] { background: #e9f2ef; border-left-color: var(--accent); }
 .projectButtons span, .projectInfo p { color: var(--muted); font-size: .73rem; }
+.pickerGroup h3 { margin: .5rem .55rem .2rem; color: var(--muted); font-size: .73rem; font-weight: 700; }
 .projectButtons strong { font-size: .84rem; font-weight: 620; line-height: 1.45; }
 .agenda { overflow: hidden; }
 .projectSections { display: flex; gap: .35rem; padding: 0 1rem; border-bottom: 1px solid var(--line); overflow-x: auto; }
@@ -108,7 +109,10 @@
 .editor input:not([type="checkbox"]), .create input { width: 145px; }
 .create > fieldset > label:first-child input { width: 225px; }
 .create select { max-width: 225px; }
-.editor label.check { display: flex; align-items: center; gap: .35rem; min-height: 36px; font-size: .8rem; }
+.editor label.check, .create label.check { display: flex; align-items: center; gap: .35rem; min-height: 36px; font-size: .8rem; }
+.create .check input { width: auto; }
+.commonDestination { color: var(--muted); align-self: center; font-size: .82rem; }
+.lifecycle { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; margin-block: .4rem; }
 .check input { accent-color: var(--accent); }
 .editor .actions, .create .actions { margin-left: auto; }
 .error { margin-top: .55rem; color: #9b3029; font-size: .8rem; }

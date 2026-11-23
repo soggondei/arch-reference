@@ -264,7 +264,10 @@ export default function AttendanceWorkspace() {
   const data = result?.data;
   const connected = data?.connected || (!result && previous?.connected);
   return <div className={styles.page}>
-    <header className={styles.siteHeader}><div><Link href="/" aria-label="LV LAB 홈">LV LAB</Link><Link href="/">사무소 홈</Link></div></header>
+    <header className={styles.siteHeader}><div>
+      <Link href="/" aria-label="LV LAB 홈">LV LAB</Link>
+        <nav aria-label="사무소 메뉴"><Link href="/">사무소 홈</Link><Link href="/?tab=projects">프로젝트 관리</Link><Link href="/?tab=schedule">프로젝트 일정</Link></nav>
+    </div></header>
     <main className={styles.main}>
       <h1>내 근태</h1>
       {result?.error ? <section className={styles.panel}><p role="alert" className={styles.error}>{result.error}</p>
