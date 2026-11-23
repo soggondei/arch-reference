@@ -1,18 +1,13 @@
-import { ScheduleItem, ScheduleCategory } from './types';
+import type { ScheduleItem, ScheduleCategory } from './types';
+import { competitionPeriod, getDeadlineDate } from './competition-dates';
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
-function extractDate(str?: string): string | undefined {
-  if (!str) return undefined;
-  const m = str.match(/(\d{4}-\d{2}-\d{2})/);
-  return m ? m[1] : undefined;
-}
-
 function addDays(dateStr: string, days: number): string {
   const d = new Date(dateStr);
-  d.setDate(d.getDate() + days);
+  d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
 
@@ -54,29 +49,31 @@ export function generateScheduleTemplate(params: {
 }): ScheduleItem[] {
   const items: ScheduleItem[] = [];
 
-  const submissionDate   = extractDate(params.submissionDate);
-  const registrationDate = extractDate(params.registrationDate);
-  const announcementDate = extractDate(params.announcementDate);
-  const resultDate       = extractDate(params.resultDate);
+  const submission       = competitionPeriod(params.submissionDate);
+  const registration     = competitionPeriod(params.registrationDate);
+  const announcementDate = competitionPeriod(params.announcementDate)?.firstDate;
+  const resultDate       = getDeadlineDate(params.resultDate);
 
   // 외부 일정
   if (announcementDate) {
     items.push({ id: generateId(), taskName: '공고',           category: 'external', endDate: announcementDate, status: 'planned', isMilestone: true });
   }
-  if (registrationDate) {
-    items.push({ id: generateId(), taskName: '응모 등록 마감', category: 'external', endDate: registrationDate, status: 'planned', isMilestone: true });
+  if (registration) {
+    items.push({ id: generateId(), taskName: '응모 등록 마감', category: 'external', endDate: registration.endDate, endTime: registration.endTime, status: 'planned', isMilestone: true });
   }
   if (resultDate) {
     items.push({ id: generateId(), taskName: '당선 발표',      category: 'external', endDate: resultDate,       status: 'planned', isMilestone: true });
   }
 
   // 내부 작업 일정 (제출마감 기준 역산)
-  if (submissionDate) {
+  if (submission) {
+    const submissionDate = submission.endDate;
     items.push({
       id: generateId(),
       taskName: '작품접수',
       category: 'external',
       endDate: submissionDate,
+      endTime: submission.endTime,
       status: 'planned',
       isMilestone: true,
     });

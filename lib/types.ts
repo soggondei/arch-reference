@@ -80,13 +80,21 @@ export interface ScheduleItem {
   category: ScheduleCategory;
   startDate?: string;
   endDate: string;
+  endTime?: string;
   status: ScheduleStatus;
+  assignee?: string;
+  reviewRequested?: boolean;
   isMilestone?: boolean;
   notionPageId?: string;
 }
 
+export type OfficeSchedulePatch = Partial<Pick<ScheduleItem, 'status' | 'assignee' | 'reviewRequested'>>;
+
 export interface CompetitionData {
   status: CompetitionStatus;
+  workspaceKind?: 'project' | 'office';
+  pm?: string;
+  scheduleRevision?: number;
   memo?: string;
   submissionDate?: string;
   registrationDate?: string;

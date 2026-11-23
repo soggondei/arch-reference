@@ -7,6 +7,8 @@ import {
   CompetitionData,
 } from '@/lib/types';
 import { generateScheduleTemplate } from '@/lib/schedule-template';
+import { patchNotionRegistrationDate, syncNotionSchedule } from '@/lib/notion-schedule-client';
+import { getDeadlineDate } from '@/lib/competition-dates';
 
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -31,10 +33,16 @@ interface Props {
   refId: string;
   projectName: string;
   competitionData: CompetitionData;
-  onUpdate: (schedules: ScheduleItem[]) => Promise<void>;
+  onUpdate: (schedules: ScheduleItem[]) => Promise<CompetitionData>;
 }
 
-export default function ScheduleSection({ refId, projectName, competitionData, onUpdate }: Props) {
+function isLinkedRegistration(item: ScheduleItem, cd: CompetitionData) {
+  return !!(cd.notionPageId && item.notionPageId && item.isMilestone && !item.startDate &&
+    item.category === 'external' && item.taskName === '응모 등록 마감' &&
+    item.endDate === getDeadlineDate(cd.registrationDate));
+}
+
+export default function ScheduleSection({ projectName, competitionData, onUpdate }: Props) {
   const schedules = competitionData.schedules ?? [];
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
@@ -70,6 +78,7 @@ export default function ScheduleSection({ refId, projectName, competitionData, o
           category: item.category,
           status: next,
           endDate: item.endDate,
+          endTime: item.endTime,
           startDate: item.startDate,
           isMilestone: item.isMilestone,
         }),
@@ -93,86 +102,62 @@ export default function ScheduleSection({ refId, projectName, competitionData, o
   async function handleNotionSync() {
     setSyncing(true);
     setSyncMsg(null);
-    let ok = 0; let fail = 0;
-
-    const updatedSchedules = [...schedules];
-
-    for (let i = 0; i < updatedSchedules.length; i++) {
-      const item = updatedSchedules[i];
-      try {
-        if (item.notionPageId) {
-          // PATCH 시도, 실패 시(아카이브/삭제) POST로 신규 생성
-          const patchRes = await fetch('/api/notion-schedule', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              notionPageId: item.notionPageId,
-              taskName: item.taskName,
-              projectName,
-              category: item.category,
-              status: item.status,
-              endDate: item.endDate,
-              startDate: item.startDate,
-              isMilestone: item.isMilestone,
-            }),
-          });
-          if (patchRes.ok) {
-            ok++;
-          } else {
-            // 페이지가 삭제/아카이브된 경우 신규 생성
-            const postRes = await fetch('/api/notion-schedule', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                taskName: item.taskName,
-                projectName,
-                category: item.category,
-                status: item.status,
-                endDate: item.endDate,
-                startDate: item.startDate,
-                isMilestone: item.isMilestone,
-              }),
-            });
-            if (postRes.ok) {
-              const data = await postRes.json() as { pageId?: string };
-              if (data.pageId) updatedSchedules[i] = { ...item, notionPageId: data.pageId };
-              ok++;
-            } else {
-              fail++;
-            }
-          }
-        } else {
-          // 신규 생성
-          const res = await fetch('/api/notion-schedule', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              taskName: item.taskName,
-              projectName,
-              category: item.category,
-              status: item.status,
-              endDate: item.endDate,
-              startDate: item.startDate,
-              isMilestone: item.isMilestone,
-            }),
-          });
-          if (res.ok) {
-            const data = await res.json() as { pageId?: string };
-            if (data.pageId) updatedSchedules[i] = { ...item, notionPageId: data.pageId };
-            ok++;
-          } else {
-            fail++;
-          }
+    const updatedSchedules: ScheduleItem[] = [];
+    let failures = 0;
+    let projectSyncFailed = false;
+    try {
+      for (const item of schedules) {
+        try {
+          updatedSchedules.push(await syncNotionSchedule(projectName, item));
+        } catch {
+          updatedSchedules.push(item);
+          failures++;
         }
-      } catch {
-        fail++;
       }
+      await onUpdate(updatedSchedules);
+      if (competitionData.notionPageId && getDeadlineDate(competitionData.registrationDate)) {
+        try {
+          await patchNotionRegistrationDate('project', competitionData.notionPageId, competitionData.registrationDate!);
+        } catch {
+          projectSyncFailed = true;
+        }
+      }
+      const messages = [`${schedules.length - failures}개 일정 동기화`];
+      if (failures) messages.push(`${failures}개 일정 실패`);
+      if (projectSyncFailed) messages.push('프로젝트 등록 마감일 동기화 실패');
+      setSyncMsg(`${failures || projectSyncFailed ? '' : '✓ '}${messages.join(' · ')}`);
+    } catch {
+      setSyncMsg('동기화 결과를 저장하지 못했습니다. 목록을 새로고침해 확인해 주세요.');
+    } finally {
+      setSyncing(false);
     }
+  }
 
-    await onUpdate(updatedSchedules);
-    setSyncing(false);
-    setSyncMsg(fail > 0 ? `${ok}개 동기화, ${fail}개 실패` : `✓ ${ok}개 Notion 동기화 완료`);
-    setTimeout(() => setSyncMsg(null), 3000);
+  async function applyRegistrationDeadline(itemId: string) {
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const saved = await onUpdate(schedules);
+      const item = saved.schedules?.find(schedule => schedule.id === itemId);
+      if (!item || !isLinkedRegistration(item, saved)) {
+        setSyncMsg('연결된 등록 마감 일정이 변경되었습니다. 새로고침 후 확인해 주세요.');
+        return;
+      }
+      const [schedule, project] = await Promise.allSettled([
+        patchNotionRegistrationDate('schedule', item.notionPageId!, saved.registrationDate!),
+        patchNotionRegistrationDate('project', saved.notionPageId!, saved.registrationDate!),
+      ]);
+      const failed = [];
+      if (schedule.status === 'rejected') failed.push('노션 일정');
+      if (project.status === 'rejected') failed.push('노션 프로젝트');
+      setSyncMsg(failed.length
+        ? `앱 마감일 저장 완료 · ${failed.join(', ')} 반영 실패. 등록 마감 반영을 다시 눌러 주세요.`
+        : '✓ 등록 마감 반영 완료 · 앱, 노션 일정, 노션 프로젝트');
+    } catch {
+      setSyncMsg('마감일을 저장하지 못했습니다. 새로고침 후 다시 시도해 주세요.');
+    } finally {
+      setSyncing(false);
+    }
   }
 
   async function handleAddSubmit() {
@@ -247,7 +232,7 @@ export default function ScheduleSection({ refId, projectName, competitionData, o
       </div>
 
       {syncMsg && (
-        <div className={`px-4 py-1.5 text-xs font-medium ${syncMsg.startsWith('✓') ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50'}`}>
+        <div role="status" className={`px-4 py-1.5 text-xs font-medium ${syncMsg.startsWith('✓') ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50'}`}>
           {syncMsg}
         </div>
       )}
@@ -302,7 +287,7 @@ export default function ScheduleSection({ refId, projectName, competitionData, o
         </div>
       ) : (
         <div className="divide-y divide-zinc-50">
-          {schedules.map(item => (
+          {[...schedules].sort((a, b) => a.endDate.localeCompare(b.endDate)).map(item => (
             <div
               key={item.id}
               className={`px-4 py-2.5 flex items-center gap-3 group transition-colors ${
@@ -333,11 +318,18 @@ export default function ScheduleSection({ refId, projectName, competitionData, o
                   {item.startDate && item.startDate !== item.endDate
                     ? `${item.startDate} ~ ${item.endDate}`
                     : item.endDate}
+                  {item.endTime && ` ${item.endTime}`}
                   {' · '}{SCHEDULE_CATEGORY_LABEL[item.category]}
                   {item.notionPageId && <span className="ml-1 text-purple-400">N</span>}
                 </p>
               </div>
 
+              {isLinkedRegistration(item, competitionData) && (
+                <button type="button" disabled={syncing} onClick={() => void applyRegistrationDeadline(item.id)}
+                  className="shrink-0 rounded border border-zinc-200 px-2 py-1 text-xs text-zinc-700 hover:bg-white disabled:opacity-50">
+                  등록 마감 반영
+                </button>
+              )}
               {/* 상태 토글 */}
               <button
                 onClick={() => void handleStatusCycle(item)}

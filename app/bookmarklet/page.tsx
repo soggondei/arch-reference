@@ -35,7 +35,7 @@ if(!w||w.closed){location.href=url;}
     <div className="min-h-screen bg-zinc-50">
       <header className="bg-white border-b border-zinc-100">
         <div className="max-w-2xl mx-auto px-6 h-14 flex items-center gap-3">
-          <Link href="/" className="text-zinc-400 hover:text-zinc-700 flex items-center gap-1.5 text-sm">
+          <Link href="/?tab=refs" className="text-zinc-400 hover:text-zinc-700 flex items-center gap-1.5 text-sm">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="15 18 9 12 15 6" />
             </svg>
@@ -63,7 +63,7 @@ if(!w||w.closed){location.href=url;}
             {[
               { step: 1, text: '아래 코드를 복사합니다.' },
               { step: 2, text: '브라우저 북마크 바를 오른쪽 클릭 → "페이지 추가" (또는 새 북마크 만들기)' },
-              { step: 3, text: '이름: "Arch Ref 저장", URL 칸에 복사한 코드를 붙여넣기' },
+              { step: 3, text: '이름: "LV LAB 저장", URL 칸에 복사한 코드를 붙여넣기' },
               { step: 4, text: '저장 후, 건축 레퍼런스 사이트에서 북마크를 클릭하면 끝!' },
             ].map(({ step, text }) => (
               <div key={step} className="flex gap-3 items-start">
@@ -109,7 +109,7 @@ if(!w||w.closed){location.href=url;}
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
             </svg>
-            Arch Ref 저장
+            LV LAB 저장
           </a>
         </div>
 

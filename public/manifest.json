@@ -1,7 +1,7 @@
 {
-  "name": "Arch Reference",
-  "short_name": "Arch Ref",
-  "description": "건축사사무소 레퍼런스 검색 & 관리",
+  "name": "LV LAB",
+  "short_name": "LV LAB",
+  "description": "LV LAB 건축사사무소의 프로젝트, 업무 일정, 설계공모와 레퍼런스",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

@@ -14,8 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Arch Reference",
-  description: "건축사사무소 레퍼런스 검색 & 관리",
+  title: "LV LAB",
+  applicationName: "LV LAB",
+  description: "LV LAB 건축사사무소의 프로젝트, 업무 일정, 설계공모와 레퍼런스",
   manifest: "/manifest.json",
   icons: {
     icon: "/icon-192.png",

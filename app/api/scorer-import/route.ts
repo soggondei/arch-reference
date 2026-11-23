@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { autoTag } from '@/lib/auto-tag';
+import { getDeadlineDate, getDDay } from '@/lib/competition-dates';
 import { createScorerListLoader, type ScorerListEntry } from '@/lib/scorer-list';
 import { RefType, JudgeMember, CompetitionFile } from '@/lib/types';
 
@@ -107,13 +108,6 @@ const SCORER_CATEGORY: Record<string, string> = {
   '종교': '종교', '산업': '산업',
 };
 
-// "2026-11-26 ~ 2026-11-27 (18:00)" 또는 "~ 2026-10-14 (18:00)"처럼 범위/단일이
-// 섞여 있어, 문자열에 등장하는 마지막 YYYY-MM-DD(= 마감일)를 뽑는다.
-function lastDate(s: string): string {
-  const all = s.match(/\d{4}-\d{2}-\d{2}/g);
-  return all && all.length ? all[all.length - 1] : '';
-}
-
 // scorer.co.kr이 2026-10월 개편 때 OG description의 (상태) 표기를 없앴다.
 // 상태 정보가 페이지 어디에도 배지로 남아있지 않아, 날짜로 계산한다.
 // 기준(사용자 결정): 작품접수 마감일.
@@ -122,11 +116,13 @@ function lastDate(s: string): string {
 //   오늘 >  작품접수 마감일  → 완료
 // 작품접수일이 없으면 심사일 → 공고일 순으로 폴백한다.
 function computeStatus(announcementDate: string, submissionDate: string, judgeDate: string): string {
-  const today = new Date().toISOString().slice(0, 10);
-  const deadline = lastDate(submissionDate) || lastDate(judgeDate);
-  if (announcementDate && today < announcementDate) return '예정';
-  if (!deadline) return announcementDate && today >= announcementDate ? '진행' : '예정';
-  return today <= deadline ? '진행' : '완료';
+  const now = new Date();
+  const untilAnnouncement = getDDay(announcementDate, now);
+  if (untilAnnouncement !== null && untilAnnouncement > 0) return '예정';
+  const deadline = getDeadlineDate(submissionDate) ?? getDeadlineDate(judgeDate);
+  const daysLeft = getDDay(deadline, now);
+  if (daysLeft === null) return untilAnnouncement === null ? '예정' : '진행';
+  return daysLeft >= 0 ? '진행' : '완료';
 }
 
 async function fetchItem(entry: ScorerListEntry): Promise<ScorerImportItem | null> {

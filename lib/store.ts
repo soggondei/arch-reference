@@ -1,5 +1,7 @@
 import { supabase } from './supabase';
-import { Reference, Collection, CompetitionData, BidParticipation } from './types';
+import type { Reference, Collection, CompetitionData, BidParticipation, OfficeSchedulePatch, ScheduleItem } from './types';
+import { normalizeRegistrationSchedule } from './competition-dates';
+import { mergeCompetitionEdit } from './competition-edits';
 
 // ── Row mappers ─────────────────────────────────────────────────────────────
 
@@ -17,7 +19,7 @@ function toRef(row: any): Reference {
     tags: row.tags ?? { program: [], material: [], mass: [], scale: '', designItem: [], site: [], region: '' },
     collectionIds: row.collection_ids ?? [],
     createdAt: row.created_at,
-    competitionData: row.competition_data ?? undefined,
+    competitionData: row.competition_data ? normalizeRegistrationSchedule(row.competition_data) : undefined,
   };
 }
 
@@ -34,17 +36,16 @@ function toCollection(row: any): Collection {
 
 // ── References ──────────────────────────────────────────────────────────────
 
-export async function getRefs(): Promise<Reference[]> {
-  const { data, error } = await supabase
-    .from('refs')
-    .select('*')
-    .order('created_at', { ascending: false });
+export async function getRefs({ includeOffice = false } = {}): Promise<Reference[]> {
+  let query = supabase.from('refs').select('*');
+  if (!includeOffice) query = query.is('competition_data->>workspaceKind', null);
+  const { data, error } = await query.order('created_at', { ascending: false });
   if (error) throw error;
   return (data ?? []).map(toRef);
 }
 
-export async function addRef(ref: Reference): Promise<void> {
-  const { error } = await supabase.from('refs').insert({
+function refRow(ref: Reference) {
+  return {
     id: ref.id,
     title: ref.title,
     image_url: ref.imageUrl || null,
@@ -57,7 +58,11 @@ export async function addRef(ref: Reference): Promise<void> {
     collection_ids: ref.collectionIds,
     created_at: ref.createdAt,
     competition_data: ref.competitionData ?? null,
-  });
+  };
+}
+
+export async function addRef(ref: Reference): Promise<void> {
+  const { error } = await supabase.from('refs').insert(refRow(ref));
   if (error) throw error;
 }
 
@@ -74,34 +79,86 @@ export async function updateRef(updated: Reference): Promise<void> {
       description: updated.description || null,
       tags: updated.tags,
       collection_ids: updated.collectionIds,
-      competition_data: updated.competitionData ?? null,
     })
     .eq('id', updated.id);
   if (error) throw error;
 }
 
-export async function updateCompetitionStatus(id: string, competitionData: CompetitionData): Promise<void> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  const res = await fetch(
-    `${url}/rest/v1/refs?id=eq.${encodeURIComponent(id)}`,
-    {
-      method: 'PATCH',
-      headers: {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-        'Content-Type': 'application/json',
-        Prefer: 'return=representation',
-      },
-      body: JSON.stringify({ competition_data: competitionData }),
-    }
-  );
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`updateCompetitionStatus 실패: ${res.status} ${text}`);
+async function editCompetition(id: string, edit: (current: CompetitionData) => CompetitionData): Promise<Reference> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const { data: row, error: readError } = await supabase.from('refs').select('*').eq('id', id).single();
+    if (readError) throw readError;
+    const ref = toRef(row);
+    if (!ref.competitionData) throw new Error('프로젝트를 찾을 수 없습니다.');
+    const next = normalizeRegistrationSchedule(edit(ref.competitionData));
+    if (JSON.stringify(next) === JSON.stringify(row.competition_data)) return ref;
+
+    const revision = ref.competitionData.scheduleRevision;
+    const update = supabase.from('refs').update({
+      competition_data: { ...next, scheduleRevision: (revision ?? 0) + 1 },
+    }).eq('id', id);
+    // Match the JSON revision in the UPDATE itself (including legacy NULL).
+    // A competing writer wins the same revision once, then we reapply our edit.
+    const guarded = revision === undefined
+      ? update.is('competition_data->>scheduleRevision', null)
+      : update.eq('competition_data->>scheduleRevision', String(revision));
+    const { data: saved, error } = await guarded.select('*').maybeSingle();
+    if (error) throw error;
+    if (saved) return toRef(saved);
   }
-  const data = await res.json() as unknown[];
-  if (!data || data.length === 0) throw new Error(`updateCompetitionStatus: 저장 실패 (id=${id})`);
+  throw new Error('다른 변경사항과 겹쳐 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+}
+
+export async function updateCompetitionStatus(id: string, next: CompetitionData, before: CompetitionData): Promise<CompetitionData> {
+  const saved = await editCompetition(id, current => mergeCompetitionEdit(current, before, next));
+  return saved.competitionData!;
+}
+
+export async function patchOfficeSchedule(id: string, scheduleId: string, patch: OfficeSchedulePatch): Promise<CompetitionData> {
+  const saved = await editCompetition(id, current => {
+    const schedules = current.schedules ?? [];
+    if (!schedules.some(item => item.id === scheduleId)) throw new Error('해당 일정이 삭제되었습니다. 목록을 새로고침해 주세요.');
+    return {
+      ...current,
+      schedules: schedules.map(item => item.id === scheduleId ? { ...item, ...patch } : item),
+    };
+  });
+  return saved.competitionData!;
+}
+
+const COMMON_OFFICE_ID = 'lv-lab-office-common';
+
+function officeProject(id: string, title: string, kind: 'project' | 'office', pm?: string): Reference {
+  return {
+    id, title, imageUrl: '', collectionIds: [], createdAt: new Date().toISOString(),
+    tags: { program: [], material: [], mass: [], scale: '', designItem: [], site: [], region: '' },
+    competitionData: { status: '작업중', workspaceKind: kind, pm: pm?.trim() || undefined, schedules: [] },
+  };
+}
+
+async function insertOfficeRecord(ref: Reference) {
+  const { error } = await supabase.from('refs').upsert(refRow(ref), { onConflict: 'id', ignoreDuplicates: true });
+  if (error) throw error;
+}
+
+export async function createOfficeProject(title: string, pm: string | undefined, id: string): Promise<Reference> {
+  if (!title.trim()) throw new Error('프로젝트명을 입력해 주세요.');
+  await insertOfficeRecord(officeProject(id, title.trim(), 'project', pm));
+  const { data, error } = await supabase.from('refs').select('*').eq('id', id).single();
+  if (error) throw error;
+  return toRef(data);
+}
+
+export async function addOfficeTask(projectId: string | null, task: ScheduleItem): Promise<Reference> {
+  if (projectId === null) {
+    const common = officeProject(COMMON_OFFICE_ID, '사무소 공통 업무', 'office');
+    await insertOfficeRecord(common);
+  }
+  return editCompetition(projectId ?? COMMON_OFFICE_ID, current => {
+    const schedules = current.schedules ?? [];
+    if (schedules.some(item => item.id === task.id)) return current;
+    return { ...current, schedules: [...schedules, task].sort((a, b) => a.endDate.localeCompare(b.endDate)) };
+  });
 }
 
 export async function deleteRef(id: string): Promise<void> {

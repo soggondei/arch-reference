@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { competitionPeriod, getDeadlineDate, notionClosingDate } from '@/lib/competition-dates';
 
 const NOTION_DB_ID = '36f9ff7b-382c-81cd-8c27-f1f6277252a3';
 const NOTION_VERSION = '2022-06-28';
-
-function toDate(str?: string) {
-  if (!str) return null;
-  const m = str.match(/(\d{4}-\d{2}-\d{2})/);
-  return m ? m[1] : null;
-}
 
 export async function POST(req: NextRequest) {
   const token = process.env.NOTION_TOKEN;
@@ -55,16 +50,16 @@ export async function POST(req: NextRequest) {
   if (submissions)  properties['제출물']               = { rich_text: [{ text: { content: submissions } }] };
   if (designFee)   properties['설계비']              = { rich_text: [{ text: { content: designFee } }] };
 
-  const sub = toDate(submissionDate);
-  if (sub) properties['최종 납기일'] = { date: { start: sub } };
+  const sub = notionClosingDate(submissionDate);
+  if (sub) properties['최종 납기일'] = sub;
 
-  const ann = toDate(announcementDate);
+  const ann = competitionPeriod(announcementDate)?.firstDate;
   if (ann) properties['공고일'] = { date: { start: ann } };
 
-  const reg = toDate(registrationDate);
-  if (reg) properties['등록마감일'] = { date: { start: reg } };
+  const reg = notionClosingDate(registrationDate);
+  if (reg) properties['등록마감일'] = reg;
 
-  const res2 = toDate(resultDate);
+  const res2 = getDeadlineDate(resultDate);
   if (res2) properties['당선발표일'] = { date: { start: res2 } };
 
   const res = await fetch('https://api.notion.com/v1/pages', {
@@ -86,19 +81,25 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ url: data.url, pageId: data.id });
 }
 
-// PATCH: 기존 프로젝트 페이지의 진행상태 업데이트
+// Date-only repairs must not reset the project's Notion status.
 export async function PATCH(req: NextRequest) {
   const token = process.env.NOTION_TOKEN;
   if (!token) return NextResponse.json({ error: 'NOTION_TOKEN 미설정' }, { status: 500 });
 
-  const { notionPageId, status } = await req.json() as { notionPageId: string; status: string };
+  const { notionPageId, status, registrationDate } = await req.json() as {
+    notionPageId: string; status?: string; registrationDate?: string;
+  };
 
   const STATUS_MAP: Record<string, string> = {
     '등록예정': '수주검토',
     '등록완료': '수주검토',
   };
 
-  const notionStatus = STATUS_MAP[status] ?? '수주검토';
+  const properties: Record<string, unknown> = {};
+  if (status) properties['진행상태'] = { select: { name: STATUS_MAP[status] ?? '수주검토' } };
+  const reg = notionClosingDate(registrationDate);
+  if (reg) properties['등록마감일'] = reg;
+  if (!Object.keys(properties).length) return NextResponse.json({ error: '변경할 속성이 없습니다.' }, { status: 400 });
 
   const res = await fetch(`https://api.notion.com/v1/pages/${notionPageId}`, {
     method: 'PATCH',
@@ -107,16 +108,15 @@ export async function PATCH(req: NextRequest) {
       'Content-Type': 'application/json',
       'Notion-Version': NOTION_VERSION,
     },
-    body: JSON.stringify({
-      properties: {
-        '진행상태': { select: { name: notionStatus } },
-      },
-    }),
+    body: JSON.stringify({ properties }),
   });
 
   const data = await res.json();
   // 404(삭제됨) 또는 400(아카이브됨) 모두 새 페이지 생성이 필요한 상태로 처리
-  if (!res.ok) return NextResponse.json({ error: data.message || '업데이트 실패', notFound: true }, { status: res.status });
+  if (!res.ok) return NextResponse.json({
+    error: data.message || '업데이트 실패',
+    notFound: res.status === 404 || (res.status === 400 && /archived|in the trash/i.test(data.message ?? '')),
+  }, { status: res.status });
 
   return NextResponse.json({ ok: true });
 }

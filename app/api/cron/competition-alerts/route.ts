@@ -2,23 +2,16 @@ import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { createClient } from '@supabase/supabase-js';
 import { Reference } from '@/lib/types';
+import { getDDay, getDeadlineDate } from '@/lib/competition-dates';
 
 const ALERT_EMAIL = 'soggon@naver.com';
 const ALERT_DAYS = [1, 3, 7]; // D-day 이 일수 남았을 때 알림
 
-function getDDay(dateStr?: string): number | null {
-  if (!dateStr) return null;
-  const matches = dateStr.match(/\d{4}-\d{2}-\d{2}/g);
-  if (!matches) return null;
-  const deadline = new Date([...matches].sort().pop()!);
-  const today = new Date(); today.setUTCHours(0, 0, 0, 0);
-  return Math.ceil((deadline.getTime() - today.getTime()) / 86400000);
-}
-
 function formatDate(str?: string) {
-  if (!str) return '';
-  const m = str.match(/(\d{4})-(\d{2})-(\d{2})/);
-  return m ? `${m[1]}년 ${parseInt(m[2])}월 ${parseInt(m[3])}일` : str;
+  const date = getDeadlineDate(str);
+  if (!date) return '';
+  const [year, month, day] = date.split('-').map(Number);
+  return `${year}년 ${month}월 ${day}일`;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -58,7 +51,8 @@ export async function GET(req: Request) {
   const { data, error } = await supabase
     .from('refs')
     .select('*')
-    .not('competition_data', 'is', null);
+    .not('competition_data', 'is', null)
+    .is('competition_data->>workspaceKind', null);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -118,20 +112,20 @@ export async function GET(req: Request) {
           <tbody>${rows}</tbody>
         </table>
         <div style="margin-top:20px;text-align:center;">
-          <a href="https://arch-reference.vercel.app/competitions"
+          <a href="https://arch-reference.vercel.app/?tab=competitions"
             style="background:#18181b;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">
             공모전 트래커 열기
           </a>
         </div>
       </div>
       <div style="padding:16px 24px;border-top:1px solid #f4f4f5;text-align:center;">
-        <p style="color:#a1a1aa;font-size:12px;margin:0;">Arch Reference · arch-reference.vercel.app</p>
+        <p style="color:#a1a1aa;font-size:12px;margin:0;">LV LAB · arch-reference.vercel.app</p>
       </div>
     </div>`;
 
   const resend = new Resend(process.env.RESEND_API_KEY);
   const { error: emailError } = await resend.emails.send({
-    from: 'Arch Reference <onboarding@resend.dev>',
+    from: 'LV LAB <onboarding@resend.dev>',
     to: ALERT_EMAIL,
     subject: `[공모전 알림] 마감 임박 ${alerts.length}건`,
     html,

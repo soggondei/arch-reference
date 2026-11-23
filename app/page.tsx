@@ -2,16 +2,19 @@
 
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Reference, Collection, FilterState, CompetitionStatus, CompetitionData, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, ScheduleItem, LINK_CATEGORIES, BidParticipation, BidParticipationStatus, BID_PARTICIPATION_STATUSES, BID_PARTICIPATION_STATUS_COLOR } from '@/lib/types';
+import { Reference, Collection, FilterState, CompetitionStatus, CompetitionData, COMPETITION_STATUSES, COMPETITION_STATUS_COLOR, LINK_CATEGORIES, BidParticipation, BidParticipationStatus, BID_PARTICIPATION_STATUSES, BID_PARTICIPATION_STATUS_COLOR } from '@/lib/types';
 import { COLLECTION_COLORS } from '@/lib/tags';
-import { getRefs, getCollections, deleteRef, addCollection, deleteCollection, updateRef, generateId, updateCompetitionStatus, archiveRefNotionSchedules, getBidParticipations, upsertBidParticipation } from '@/lib/store';
+import { getRefs, getCollections, deleteRef, addCollection, deleteCollection, updateRef, generateId, updateCompetitionStatus, archiveRefNotionSchedules, getBidParticipations, upsertBidParticipation, createOfficeProject, addOfficeTask, patchOfficeSchedule } from '@/lib/store';
 import { autoTag } from '@/lib/auto-tag';
 import { generateScheduleTemplate } from '@/lib/schedule-template';
+import { autoSyncSchedulesToNotion } from '@/lib/notion-schedule-client';
+import { deadlineLabel, getDDay } from '@/lib/competition-dates';
 import ReferenceCard from '@/components/ReferenceCard';
 import FilterPanel from '@/components/FilterPanel';
 import FilterSheet from '@/components/FilterSheet';
 import UploadForm from '@/components/UploadForm';
 import LinkForm from '@/components/LinkForm';
+import OfficeWorkspace from '@/components/OfficeWorkspace';
 import Link from 'next/link';
 import { gyeongnamScope } from '@/lib/bid-scope';
 
@@ -628,15 +631,6 @@ const INIT_FILTERS: FilterState = {
   collectionId: null,
 };
 
-function getDDay(dateStr?: string): number | null {
-  if (!dateStr) return null;
-  const matches = dateStr.match(/\d{4}-\d{2}-\d{2}/g);
-  if (!matches) return null;
-  const deadline = new Date([...matches].sort().pop()! + 'T00:00:00');
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  return Math.ceil((deadline.getTime() - today.getTime()) / 86400000);
-}
-
 function DDayBadge({ dday }: { dday: number | null }) {
   if (dday === null) return null;
   const bg = dday < 0 ? '#94a3b8' : dday <= 7 ? '#ef4444' : dday <= 30 ? '#f97316' : '#3b82f6';
@@ -793,14 +787,14 @@ function CompetitionRow({
       <div className="hidden md:flex items-center gap-5 shrink-0 text-xs text-zinc-500">
         {cd.registrationDate && (
           <div className="text-right">
-            <p className="text-[10px] text-zinc-400">응모등록</p>
-            <p>{cd.registrationDate.slice(0, 10)}</p>
+            <p className="text-[10px] text-zinc-400">응모등록 마감</p>
+            <p>{deadlineLabel(cd.registrationDate)}</p>
           </div>
         )}
         {cd.submissionDate && (
           <div className="text-right">
             <p className="text-[10px] text-zinc-400">작품접수</p>
-            <p>{cd.submissionDate.slice(0, 10)}</p>
+            <p>{deadlineLabel(cd.submissionDate)}</p>
           </div>
         )}
         {cd.designFee && (
@@ -990,7 +984,7 @@ function BookmarkletHandler({ onPrefill }: { onPrefill: (data: Record<string, st
       const sourceUrl   = searchParams.get('sourceUrl')   || '';
       const suggested = autoTag(title, description, []);
       onPrefill({ title, imageUrl, description, sourceUrl, _suggestedTags: JSON.stringify(suggested) });
-      router.replace('/');
+      router.replace('/?tab=refs');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -998,14 +992,30 @@ function BookmarkletHandler({ onPrefill }: { onPrefill: (data: Record<string, st
   return null;
 }
 
+const NAV_ITEMS = [
+  ['office', '사무소 홈'], ['projects', '프로젝트'], ['tasks', '내 업무'],
+  ['refs', '레퍼런스'], ['competitions', '공모전'], ['bids', '입찰정보'],
+  ['changwon', '경상남도'], ['links', '링크'],
+] as const;
+
 export default function Home() {
+  return <Suspense fallback={<p className="p-6 text-sm text-zinc-500">LV LAB 불러오는 중…</p>}><WorkspacePage /></Suspense>;
+}
+
+function WorkspacePage() {
+  const searchParams = useSearchParams();
+  const tab = NAV_ITEMS.find(([key]) => key === searchParams.get('tab'))?.[0] ?? 'office';
+  const isOfficeView = tab === 'office' || tab === 'projects' || tab === 'tasks';
   const [refs, setRefs] = useState<Reference[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [filters, setFilters] = useState<FilterState>(INIT_FILTERS);
   const [showUpload, setShowUpload] = useState(false);
   const [prefill, setPrefill] = useState<Record<string, string> | null>(null);
   const [editingRef, setEditingRef] = useState<Reference | null>(null);
-  const [tab, setTab] = useState<'refs' | 'competitions' | 'bids' | 'changwon' | 'links'>('refs');
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [syncNotice, setSyncNotice] = useState('');
+  const loadSequence = useRef(0);
   const [showLinkForm, setShowLinkForm] = useState(false);
   const [editingLink, setEditingLink] = useState<Reference | null>(null);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
@@ -1030,12 +1040,67 @@ export default function Home() {
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
 
   const load = useCallback(async () => {
-    const [r, c] = await Promise.all([getRefs(), getCollections()]);
-    setRefs(r);
-    setCollections(c);
+    const sequence = ++loadSequence.current;
+    try {
+      const [r, c] = await Promise.all([getRefs({ includeOffice: true }), getCollections()]);
+      if (sequence !== loadSequence.current) return;
+      setRefs(r);
+      setCollections(c);
+      setLoadError('');
+    } catch {
+      if (sequence === loadSequence.current) setLoadError('자료를 불러오지 못했습니다. 연결 상태를 확인해 주세요.');
+    } finally {
+      if (sequence === loadSequence.current) setLoaded(true);
+    }
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    if (!isOfficeView) return;
+    const refresh = () => { if (document.visibilityState === 'visible') void load(); };
+    document.addEventListener('visibilitychange', refresh);
+    const timer = window.setInterval(refresh, 60000);
+    return () => { document.removeEventListener('visibilitychange', refresh); window.clearInterval(timer); };
+  }, [isOfficeView, load]);
+
+  function applyCompetition(id: string, saved: CompetitionData) {
+    ++loadSequence.current;
+    setRefs(previous => previous.map(ref => ref.id === id &&
+      (ref.competitionData?.scheduleRevision ?? 0) <= (saved.scheduleRevision ?? 0)
+      ? { ...ref, competitionData: saved } : ref));
+  }
+
+  function upsertWorkspaceRef(saved: Reference) {
+    ++loadSequence.current;
+    setRefs(previous => previous.some(ref => ref.id === saved.id)
+      ? previous.map(ref => ref.id === saved.id && (ref.competitionData?.scheduleRevision ?? 0) <= (saved.competitionData?.scheduleRevision ?? 0) ? saved : ref)
+      : [saved, ...previous]);
+  }
+
+  async function handleCreateProject(name: string, pm: string, id: string) {
+    const project = await createOfficeProject(name, pm, id);
+    upsertWorkspaceRef(project);
+    return project.id;
+  }
+
+  async function handleUpdateTask(refId: string, taskId: string, patch: Parameters<typeof patchOfficeSchedule>[2]) {
+    const saved = await patchOfficeSchedule(refId, taskId, patch);
+    applyCompetition(refId, saved);
+    const task = saved.schedules?.find(item => item.id === taskId);
+    if (patch.status && task?.notionPageId) {
+      const projectName = refs.find(ref => ref.id === refId)?.title;
+      try {
+        const response = await fetch('/api/notion-schedule', {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...task, projectName }),
+        });
+        if (!response.ok) throw new Error();
+      } catch {
+        setSyncNotice('업무 상태는 저장했습니다. 노션 반영은 공모 상세의 ‘Notion 동기화’에서 다시 시도해 주세요.');
+      }
+    }
+  }
 
   function handlePrefill(data: Record<string, string>) {
     setPrefill(data);
@@ -1097,57 +1162,12 @@ export default function Home() {
             ...fetched,
             files: fetched.files?.length ? fetched.files : r.competitionData?.files,
           };
-          await updateCompetitionStatus(r.id, updated);
-          setRefs(prev => prev.map(x => x.id === r.id ? { ...x, competitionData: updated } : x));
+          applyCompetition(r.id, await updateCompetitionStatus(r.id, updated, r.competitionData!));
         } catch { /* skip */ }
       }));
     }
   }
 
-  async function autoSyncSchedulesToNotion(projectName: string, schedules: ScheduleItem[]): Promise<ScheduleItem[]> {
-    const results = await Promise.allSettled(
-      schedules.map(async item => {
-        // notionPageId가 있으면 PATCH 먼저 시도, 실패 시(아카이브/삭제) POST로 신규 생성
-        if (item.notionPageId) {
-          const patchRes = await fetch('/api/notion-schedule', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              notionPageId: item.notionPageId,
-              taskName: item.taskName,
-              projectName,
-              category: item.category,
-              status: item.status,
-              endDate: item.endDate,
-              startDate: item.startDate,
-              isMilestone: item.isMilestone,
-            }),
-          });
-          if (patchRes.ok) return { pageId: item.notionPageId };
-        }
-        // notionPageId 없거나 PATCH 실패 → 신규 생성
-        const postRes = await fetch('/api/notion-schedule', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            taskName: item.taskName,
-            projectName,
-            category: item.category,
-            status: item.status,
-            endDate: item.endDate,
-            startDate: item.startDate,
-            isMilestone: item.isMilestone,
-          }),
-        });
-        return postRes.ok ? postRes.json() : null;
-      })
-    );
-    return schedules.map((item, i) => {
-      const r = results[i];
-      if (r.status === 'fulfilled' && r.value?.pageId) return { ...item, notionPageId: r.value.pageId as string };
-      return item;
-    });
-  }
 
   async function handleParticipationChange(p: BidParticipation) {
     await upsertBidParticipation(p);
@@ -1175,11 +1195,12 @@ export default function Home() {
 
   useEffect(() => {
     if (tab !== 'bids' && tab !== 'changwon') return;
+    if (!bidsLoaded && !bidsError) loadBidsIfNeeded();
     const refresh = () => { if (document.visibilityState === 'visible') loadBidsIfNeeded(true); };
     const timer = window.setInterval(refresh, 5 * 60 * 1000);
     document.addEventListener('visibilitychange', refresh);
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', refresh); };
-  }, [tab, loadBidsIfNeeded]);
+  }, [tab, bidsLoaded, bidsError, loadBidsIfNeeded]);
 
   async function handleCompetitionStatusChange(id: string, status: CompetitionStatus) {
     if (syncingIds.current.has(id)) return;
@@ -1206,7 +1227,7 @@ export default function Home() {
           const r = await fetch('/api/notion-project', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ notionPageId: cd.notionPageId, status }),
+            body: JSON.stringify({ notionPageId: cd.notionPageId, status, registrationDate: cd.registrationDate }),
           });
           if (!r.ok) {
             const err = await r.json() as { notFound?: boolean };
@@ -1249,16 +1270,21 @@ export default function Home() {
     }
 
     // 3. 스케줄 + notionPageId 모두 포함해서 한 번에 저장
-    await updateCompetitionStatus(id, cd);
-    setRefs(prev => prev.map(r => r.id === id ? { ...r, competitionData: cd } : r));
+    try {
+      cd = await updateCompetitionStatus(id, cd, ref.competitionData);
+      applyCompetition(id, cd);
+    } catch {
+      syncingIds.current.delete(id);
+      setSyncNotice('공모 상태를 저장하지 못했습니다. 다시 시도해 주세요.');
+      return;
+    }
 
     // 4. Notion 스케줄 동기화 (백그라운드 - cd 캡처해서 stale closure 방지)
     if (cd.schedules && cd.schedules.length > 0) {
       const snapshot = cd;
       autoSyncSchedulesToNotion(ref.title, snapshot.schedules!).then(async synced => {
         const withSynced = { ...snapshot, schedules: synced };
-        await updateCompetitionStatus(id, withSynced);
-        setRefs(prev => prev.map(x => x.id === id ? { ...x, competitionData: withSynced } : x));
+        applyCompetition(id, await updateCompetitionStatus(id, withSynced, snapshot));
       }).catch(() => {/* silent */}).finally(() => { syncingIds.current.delete(id); });
     } else {
       syncingIds.current.delete(id);
@@ -1300,7 +1326,7 @@ export default function Home() {
   // 레퍼런스 / 공모전 / 링크 분리
   const linkRefs = refs.filter(r => r.refType === 'link');
   const regularRefs = refs.filter(r => !r.competitionData && r.refType !== 'link');
-  const competitionRefs = refs.filter(r => r.competitionData);
+  const competitionRefs = refs.filter(r => r.competitionData && !r.competitionData.workspaceKind);
 
   const filtered = regularRefs.filter(ref => {
     if (filters.search) {
@@ -1334,12 +1360,12 @@ export default function Home() {
       {/* Header */}
       <header className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-zinc-100">
         <div className="max-w-screen-xl mx-auto px-6 h-14 flex items-center gap-4">
-          <button
-            onClick={() => { setTab('refs'); setFilters(INIT_FILTERS); }}
+          <Link
+            href="/"
             className="font-bold text-zinc-900 text-base tracking-tight shrink-0 hover:text-zinc-600 transition-colors"
           >
-            Arch Reference
-          </button>
+            LV LAB
+          </Link>
 
           {tab === 'refs' && (
             <div className="hidden md:block flex-1 max-w-md">
@@ -1380,43 +1406,33 @@ export default function Home() {
           </div>
         )}
 
-        {/* 탭 */}
-        <div className="max-w-screen-xl mx-auto px-6 flex gap-0 border-t border-zinc-100 overflow-x-auto scrollbar-hide">
-          <button
-            onClick={() => setTab('refs')}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${tab === 'refs' ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-400 hover:text-zinc-700'}`}
-          >
-            레퍼런스 {regularRefs.length > 0 && <span className="ml-1 text-xs text-zinc-400">{regularRefs.length}</span>}
-          </button>
-          <button
-            onClick={() => setTab('competitions')}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${tab === 'competitions' ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-400 hover:text-zinc-700'}`}
-          >
-            공모전 {competitionRefs.length > 0 && <span className="ml-1 text-xs text-zinc-400">{competitionRefs.length}</span>}
-          </button>
-          <button
-            onClick={() => { setTab('bids'); loadBidsIfNeeded(); }}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${tab === 'bids' ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-400 hover:text-zinc-700'}`}
-          >
-            입찰정보
-          </button>
-          <button
-            onClick={() => { setTab('changwon'); loadBidsIfNeeded(); }}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${tab === 'changwon' ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-400 hover:text-zinc-700'}`}
-          >
-            경상남도
-          </button>
-          <button
-            onClick={() => setTab('links')}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${tab === 'links' ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-400 hover:text-zinc-700'}`}
-          >
-            링크 {linkRefs.length > 0 && <span className="ml-1 text-xs text-zinc-400">{linkRefs.length}</span>}
-          </button>
-        </div>
+        <nav aria-label="주 메뉴" className="max-w-screen-xl mx-auto px-4 sm:px-6 flex border-t border-zinc-100 overflow-x-auto">
+          {NAV_ITEMS.map(([key, label]) => {
+            const count = key === 'refs' ? regularRefs.length : key === 'competitions' ? competitionRefs.length : key === 'links' ? linkRefs.length : 0;
+            return (
+              <Link key={key} href={key === 'office' ? '/' : `/?tab=${key}`} scroll={false}
+                aria-current={tab === key ? 'page' : undefined}
+                className={`px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap shrink-0 ${tab === key ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-500 hover:text-zinc-800'}`}>
+                {label}{count > 0 && <span className="ml-1 text-xs text-zinc-400">{count}</span>}
+              </Link>
+            );
+          })}
+        </nav>
       </header>
 
-      <div className="max-w-screen-xl mx-auto px-6 py-6 flex gap-8">
-        {tab === 'refs' ? (
+      {loadError && <div role="alert" className="max-w-screen-xl mx-auto w-full px-6 pt-4 text-sm text-amber-800">
+        {loadError} <button onClick={() => void load()} className="underline">다시 불러오기</button>
+      </div>}
+      {syncNotice && <div role="status" className="max-w-screen-xl mx-auto w-full px-6 pt-4 text-sm text-amber-800">
+        {syncNotice} <button onClick={() => setSyncNotice('')} className="underline">닫기</button>
+      </div>}
+      <div className="w-full max-w-screen-xl mx-auto px-4 sm:px-6 py-6 flex gap-8">
+        {isOfficeView ? (
+          !loaded ? <p role="status" className="py-8 text-sm text-zinc-500">업무 일정을 불러오는 중…</p> :
+          loadError && !refs.length ? null :
+          <OfficeWorkspace view={tab} refs={refs} onUpdateTask={handleUpdateTask} onCreateProject={handleCreateProject}
+            onCreateTask={async (projectId, task) => { upsertWorkspaceRef(await addOfficeTask(projectId, task)); }} />
+        ) : tab === 'refs' ? (
           <>
             <div className="hidden md:flex">
               <FilterPanel
