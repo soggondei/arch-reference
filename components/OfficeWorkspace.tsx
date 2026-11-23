@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { AttendanceQuickAction } from './AttendanceWorkspace';
 import TaskJournal from './TaskJournal';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { isDroppedCompetition, SCHEDULE_CATEGORY_LABEL, SCHEDULE_STATUS_LABEL } from '@/lib/types';
@@ -314,6 +315,7 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
           <button className={styles.primary} onClick={() => openForm('task')}>+ 업무 추가</button>
         </div>
       </div>
+      {view === 'office' && <AttendanceQuickAction />}
       {formType && <CreateForm key={view + formType} type={formType} projects={projects}
         defaultProject={newTaskProject?.competitionData?.workspaceKind === 'office' ? '' : newTaskProject?.id ?? ''}
         member={view === 'tasks' ? member : ''} createProject={onCreateProject} createTask={onCreateTask} close={() => setForm(null)}
