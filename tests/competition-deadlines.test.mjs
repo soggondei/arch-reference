@@ -87,4 +87,12 @@ test('targeted repair updates only the date of the two existing Notion pages', a
     {url: 'https://api.notion.com/v1/pages/linked-schedule', method: 'PATCH', properties: {'날짜': date}},
     {url: 'https://api.notion.com/v1/pages/linked-project', method: 'PATCH', properties: {'등록마감일': date}},
   ]);
+  const edit = new Request('http://localhost.test', { method: 'PATCH', body: JSON.stringify({
+    notionPageId: 'linked-schedule', projectName: '수유', taskName: '도면 작업', category: 'design', status: 'planned',
+    startDate: '2026-11-23', endDate: '2026-11-27', endTime: '17:00',
+  }) });
+  assert.equal((await schedule(edit)).status, 200);
+  assert.deepEqual(requests.at(-1).properties['날짜'].date, {
+    start: '2026-11-23T00:00:00+09:00', end: '2026-11-27T17:00:00+09:00',
+  });
 });

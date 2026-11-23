@@ -997,6 +997,7 @@ function WorkspacePage() {
   const searchParams = useSearchParams();
   const tab = NAV_ITEMS.find(([key]) => key !== 'attendance' && key === searchParams.get('tab'))?.[0] ?? 'office';
   const section = searchParams.get('section');
+  const calendarView = searchParams.get('view');
   const isOfficeView = tab === 'office' || tab === 'projects' || tab === 'tasks';
   const [refs, setRefs] = useState<Reference[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -1076,11 +1077,12 @@ function WorkspacePage() {
     return project.id;
   }
 
-  async function handleUpdateTask(refId: string, taskId: string, patch: Parameters<typeof patchOfficeSchedule>[2]) {
-    const saved = await patchOfficeSchedule(refId, taskId, patch);
+  async function handleUpdateTask(...args: Parameters<typeof patchOfficeSchedule>) {
+    const [refId, taskId, patch] = args;
+    const saved = await patchOfficeSchedule(...args);
     applyCompetition(refId, saved);
     const task = saved.schedules?.find(item => item.id === taskId);
-    if (patch.status && task?.notionPageId) {
+    if (task?.notionPageId && (patch.status || 'startDate' in patch || 'endDate' in patch || 'endTime' in patch)) {
       const projectName = refs.find(ref => ref.id === refId)?.title;
       try {
         const response = await fetch('/api/notion-schedule', {
@@ -1089,7 +1091,7 @@ function WorkspacePage() {
         });
         if (!response.ok) throw new Error();
       } catch {
-        setSyncNotice('업무 상태는 저장했습니다. 노션 반영은 공모 상세의 ‘Notion 동기화’에서 다시 시도해 주세요.');
+        setSyncNotice('업무는 저장했습니다. 노션 반영은 공모 상세의 ‘Notion 동기화’에서 다시 시도해 주세요.');
       }
     }
   }
@@ -1425,9 +1427,12 @@ function WorkspacePage() {
           loadError && !refs.length ? null :
           <OfficeWorkspace view={tab} refs={refs} onUpdateTask={handleUpdateTask} onCreateProject={handleCreateProject}
             routeProject={searchParams.get('project') ?? undefined} routeTask={searchParams.get('task') ?? undefined}
-            section={section === 'report' || section === 'references' || section === 'planning' ? section : 'schedule'}
+            calendarView={calendarView === 'day' || calendarView === 'week' || calendarView === 'year' ? calendarView : 'month'}
+            calendarDate={searchParams.get('date') ?? undefined} calendarTaskProject={searchParams.get('taskProject') ?? undefined}
+            section={section === 'report' || section === 'references' || section === 'planning' || section === 'schedule' ? section
+              : section !== 'calendar' && searchParams.has('task') ? 'schedule' : 'calendar'}
             onActivity={async (id, change) => { upsertWorkspaceRef(await saveProjectActivity(id, change)); }}
-            onCreateTask={async (projectId, task) => { upsertWorkspaceRef(await addOfficeTask(projectId, task)); }} />
+            onCreateTask={async (projectId, task) => { const saved = await addOfficeTask(projectId, task); upsertWorkspaceRef(saved); return saved.id; }} />
         ) : tab === 'refs' ? (
           <>
             <div className="hidden md:flex">

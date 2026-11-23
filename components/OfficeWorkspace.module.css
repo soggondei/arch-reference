@@ -113,6 +113,12 @@
 .editor .actions, .create .actions { margin-left: auto; }
 .error { margin-top: .55rem; color: #9b3029; font-size: .8rem; }
 .notice { color: var(--accent); font-size: .84rem; margin-top: .55rem; }
+.calendarDetail { border-top: 2px solid var(--accent); }
+.detailHeading { padding: .9rem 1rem; display: flex; align-items: center; justify-content: space-between; gap: .65rem; }
+.detailHeading h3 { font-size: 1rem; font-weight: 700; scroll-margin-top: 8rem; }
+.detailHeading small, .officialDate { font-size: .78rem; color: var(--muted); }
+.officialDate { flex-basis: 100%; }
+.officialDate a { color: var(--accent); margin-left: .5rem; text-decoration: underline; }
 @media (max-width: 760px) {
   .projectLayout { grid-template-columns: 1fr; gap: .7rem; }
   .projectPicker { padding: .65rem .8rem; }

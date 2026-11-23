@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
-import type { Reference, Collection, CompetitionData, BidParticipation, OfficeSchedulePatch, ScheduleItem, ProjectActivityChange } from './types';
+import type { Reference, Collection, CompetitionData, BidParticipation, OfficeSchedulePatch, ScheduleItem, TaskDates, ProjectActivityChange } from './types';
+import { isCalendarDate, isOfficialCalendarTask, redateOfficialCalendarTasks } from './project-calendar';
 import { normalizeRegistrationSchedule } from './competition-dates';
 import { mergeCompetitionEdit, recordTaskCompletions } from './competition-edits';
 import { attendanceDate } from './attendance';
@@ -120,7 +121,7 @@ export async function updateCompetitionStatus(id: string, next: CompetitionData,
     if (transition && current.status !== before.status && current.status !== next.status) {
       throw new Error('공모 상태가 변경되었습니다. 최신 상태를 확인해 주세요.');
     }
-    const merged = mergeCompetitionEdit(current, before, next);
+    const merged = redateOfficialCalendarTasks(current, mergeCompetitionEdit(current, before, next));
     return transition ? trackCompetitionTransition(current, merged, transition.id, transition.day) : merged;
   });
   return saved.competitionData!;
@@ -137,13 +138,28 @@ export async function saveProjectActivity(projectId: string, change: ProjectActi
   return editCompetition(projectId, current => applyProjectActivity(current, change));
 }
 
-export async function patchOfficeSchedule(id: string, scheduleId: string, patch: OfficeSchedulePatch): Promise<CompetitionData> {
+function checkTaskDates(task: TaskDates) {
+  if (!isCalendarDate(task.endDate) || (task.startDate && (!isCalendarDate(task.startDate) || task.startDate > task.endDate))
+    || (task.endTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(task.endTime))) {
+    throw new Error('시작일과 마감일, 마감 시각을 확인해 주세요.');
+  }
+}
+
+export async function patchOfficeSchedule(id: string, scheduleId: string, patch: OfficeSchedulePatch, previousDates?: TaskDates): Promise<CompetitionData> {
   const saved = await editCompetition(id, current => {
     const schedules = current.schedules ?? [];
-    if (!schedules.some(item => item.id === scheduleId)) throw new Error('해당 일정이 삭제되었습니다. 목록을 새로고침해 주세요.');
+    const task = schedules.find(item => item.id === scheduleId);
+    if (!task) throw new Error('해당 일정이 삭제되었습니다. 목록을 새로고침해 주세요.');
+    const updated = { ...task, ...patch };
+    const dateKeys = ['startDate', 'endDate', 'endTime'] as const;
+    if (dateKeys.some(key => key in patch && task[key] !== updated[key])) {
+      if (isOfficialCalendarTask({ competitionData: current }, task)) throw new Error('공식 일정 날짜는 공모 상세에서 수정해 주세요.');
+      if (previousDates && dateKeys.some(key => task[key] !== previousDates[key])) throw new Error('다른 곳에서 일정 날짜를 변경했습니다. 업무를 다시 열어 확인해 주세요.');
+      checkTaskDates(updated);
+    }
     return {
       ...current,
-      schedules: schedules.map(item => item.id === scheduleId ? { ...item, ...patch } : item),
+      schedules: schedules.map(item => item.id === scheduleId ? updated : item),
     };
   });
   return saved.competitionData!;
@@ -173,6 +189,7 @@ export async function createOfficeProject(title: string, pm: string | undefined,
 }
 
 export async function addOfficeTask(projectId: string | null, task: ScheduleItem): Promise<Reference> {
+  checkTaskDates(task);
   if (projectId === null) {
     const common = officeProject(COMMON_OFFICE_ID, '사무소 공통 업무', 'office');
     await insertOfficeRecord(common);

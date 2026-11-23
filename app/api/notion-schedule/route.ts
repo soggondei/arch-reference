@@ -40,7 +40,7 @@ function buildProperties(
     '프로젝트명': { rich_text: [{ text: { content: projectName } }] },
     '날짜': {
       date: startDate
-        ? { start: startDate, end: endDate }
+        ? { start: notionDate(startDate, endTime ? '00:00' : undefined), end: notionDate(endDate, endTime) }
         : { start: notionDate(endDate, endTime) },
     },
     '상태': { select: { name: STATUS_MAP[status] } },
