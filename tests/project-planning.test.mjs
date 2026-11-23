@@ -59,6 +59,27 @@ test('ordinary projects can use contract phases, archive, update old notes and r
   assert.throws(()=>applyPlanning(edited,close({...input,lesson:'늦은 편집'},1)),/변경/);
 });
 
+test('completing an ordinary project records its day and can be reopened or reviewed independently', () => {
+  const ordinary = { ...project, workspaceKind: 'project', workLogs: [publicLog] };
+  const finish = { kind: 'complete', id: 'finish-1', day: '2026-11-23', lifecycleRevision: 0 };
+  const done = applyPlanning(ordinary, finish);
+  assert.equal(done.planning.archived, true);
+  assert.equal(done.planning.closeouts[0].day, finish.day);
+  assert.equal(done.planning.closeouts[0].minutes, null);
+  assert.equal(done.workLogs, ordinary.workLogs);
+  assert.equal(done.schedules, ordinary.schedules);
+  assert.equal(applyPlanning(done, finish), done);
+  const reviewed = applyPlanning(done, close({ ...review, id: finish.id, outcome: '종료', phase: null }, 1, 1));
+  assert.equal(reviewed.planning.closeouts[0].reason, review.reason);
+  const reopened = applyPlanning(reviewed, { kind: 'reopen', lifecycleRevision: 1 });
+  assert.equal(reopened.planning.archived, false);
+  assert.equal(reopened.planning.closeouts.length, 1);
+  assert.throws(() => applyPlanning(reopened, finish), /변경/);
+  assert.throws(() => applyPlanning(project, finish), /일반 프로젝트/);
+  assert.throws(() => applyPlanning({ ...ordinary, workspaceKind: 'office' }, finish), /프로젝트/);
+  assert.throws(() => applyPlanning(ordinary, { ...finish, day: '2026-11-31' }), /완료일/);
+});
+
 test('dropping in either existing status management or the planning form preserves schedules, dated episodes and evidence',()=>{
   const data={...project,workLogs:[publicLog],feedback:[{id:'feedback'}],notionPageId:'notion-project'};
   const dropped=trackCompetitionTransition(data,{...data,status:'드롭'},'event','2026-11-24');

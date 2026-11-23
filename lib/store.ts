@@ -1,11 +1,12 @@
 import { supabase } from './supabase';
 import type { Reference, Collection, CompetitionData, BidParticipation, OfficeSchedulePatch, ScheduleItem, TaskDates, ProjectActivityChange } from './types';
+import { SCHEDULE_CATEGORY_LABEL } from './types';
 import { isCalendarDate, isOfficialCalendarTask, redateOfficialCalendarTasks } from './project-calendar';
 import { normalizeRegistrationSchedule } from './competition-dates';
 import { mergeCompetitionEdit, recordTaskCompletions } from './competition-edits';
 import { attendanceDate } from './attendance';
 import { applyProjectActivity } from './project-activity';
-import { applyPlanning, trackCompetitionTransition } from './project-planning';
+import { applyPlanning, assignedPhase, trackCompetitionTransition } from './project-planning';
 import { suggestedProjectColor } from './project-color';
 import { isWorkspaceProject } from './workspace-navigation';
 
@@ -174,20 +175,51 @@ function checkTaskDates(task: TaskDates) {
   }
 }
 
-export async function patchOfficeSchedule(id: string, scheduleId: string, patch: OfficeSchedulePatch, previousDates?: TaskDates): Promise<CompetitionData> {
+function checkedTaskDetails<T extends OfficeSchedulePatch>(patch: T): T {
+  if ('category' in patch && !Object.hasOwn(SCHEDULE_CATEGORY_LABEL, patch.category ?? '')) throw new Error('일정 구분을 확인해 주세요.');
+  if (patch.isMilestone !== undefined && typeof patch.isMilestone !== 'boolean') throw new Error('주요 일정 표시를 확인해 주세요.');
+  if (!('taskName' in patch)) return patch;
+  const name = typeof patch.taskName === 'string' ? patch.taskName.trim() : '';
+  if (!name || name.length > 180) throw new Error('일정명을 1~180자로 입력해 주세요.');
+  return { ...patch, taskName: name };
+}
+
+export async function patchOfficeSchedule(id: string, scheduleId: string, patch: OfficeSchedulePatch, previous?: TaskDates & OfficeSchedulePatch): Promise<CompetitionData> {
+  const changes = checkedTaskDetails(patch);
   const saved = await editCompetition(id, current => {
     const schedules = current.schedules ?? [];
     const task = schedules.find(item => item.id === scheduleId);
     if (!task) throw new Error('해당 일정이 삭제되었습니다. 목록을 새로고침해 주세요.');
-    const updated = { ...task, ...patch };
+    const updated = { ...task, ...changes };
     const dateKeys = ['startDate', 'endDate', 'endTime'] as const;
-    if (dateKeys.some(key => key in patch && task[key] !== updated[key])) {
-      if (isOfficialCalendarTask({ competitionData: current }, task)) throw new Error('공식 일정 날짜는 공모 상세에서 수정해 주세요.');
-      if (previousDates && dateKeys.some(key => task[key] !== previousDates[key])) throw new Error('다른 곳에서 일정 날짜를 변경했습니다. 업무를 다시 열어 확인해 주세요.');
+    const identityKeys = ['taskName', 'category', 'isMilestone'] as const;
+    const datesChanged = dateKeys.some(key => task[key] !== updated[key]);
+    const identityChanged = identityKeys.some(key => task[key] !== updated[key]);
+    if ((datesChanged || identityChanged) && isOfficialCalendarTask({ competitionData: current }, task)) {
+      throw new Error('공식 일정의 이름·구분·주요 일정 표시와 날짜는 공모 정보에 연결되어 있습니다. 날짜는 공모 상세에서 수정해 주세요.');
+    }
+    if (datesChanged) {
+      if (previous && dateKeys.some(key => task[key] !== previous[key])) throw new Error('다른 곳에서 일정 날짜를 변경했습니다. 업무를 다시 열어 확인해 주세요.');
       checkTaskDates(updated);
     }
+    if (previous) {
+      const editable = [...identityKeys, 'status', 'assignee', 'reviewRequested', 'waitingFor', 'nextAction'] as const;
+      const fullSnapshot = 'taskName' in previous && 'category' in previous && 'status' in previous;
+      if (editable.some(key => (fullSnapshot || key in previous) && task[key] !== updated[key] && task[key] !== previous[key])) {
+        throw new Error('다른 곳에서 같은 업무 항목을 변경했습니다. 업무를 다시 열어 확인해 주세요.');
+      }
+    }
+    let next = current;
+    if (updated.taskName !== task.taskName) {
+      const phase = assignedPhase(current, task.id, task.taskName);
+      // Template phases can be inferred from the name. Keep the phase of this
+      // task ID and its recorded hours when the name changes.
+      if (phase !== assignedPhase(current, task.id, updated.taskName)) {
+        next = applyPlanning(current, { kind: 'setPlan', budgets: [], assignments: [{ key: task.id, after: phase }] });
+      }
+    }
     return {
-      ...current,
+      ...next,
       schedules: schedules.map(item => item.id === scheduleId ? updated : item),
     };
   });
@@ -217,6 +249,7 @@ export async function createOfficeProject(title: string, pm: string | undefined,
 
 export async function addOfficeTask(projectId: string | null, task: ScheduleItem): Promise<Reference> {
   checkTaskDates(task);
+  const checked = checkedTaskDetails(task);
   if (projectId === null) {
     const common = officeProject(COMMON_OFFICE_ID, '사무소 공통 업무', 'office');
     await insertOfficeRecord(common);
@@ -224,7 +257,7 @@ export async function addOfficeTask(projectId: string | null, task: ScheduleItem
   return editCompetition(projectId ?? COMMON_OFFICE_ID, current => {
     const schedules = current.schedules ?? [];
     if (schedules.some(item => item.id === task.id)) return current;
-    return { ...current, schedules: [...schedules, task].sort((a, b) => a.endDate.localeCompare(b.endDate)) };
+    return { ...current, schedules: [...schedules, checked].sort((a, b) => a.endDate.localeCompare(b.endDate)) };
   }, projectId === null);
 }
 

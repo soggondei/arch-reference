@@ -116,7 +116,8 @@ export interface DrawingRecord {
 }
 
 export type TaskDates = Pick<ScheduleItem, 'startDate' | 'endDate' | 'endTime'>;
-export type OfficeSchedulePatch = Partial<TaskDates & Pick<ScheduleItem, 'status' | 'assignee' | 'reviewRequested' | 'waitingFor' | 'nextAction'>>;
+export type OfficeSchedulePatch = Partial<TaskDates & Pick<ScheduleItem,
+  'taskName' | 'category' | 'isMilestone' | 'status' | 'assignee' | 'reviewRequested' | 'waitingFor' | 'nextAction'>>;
 
 export interface WorkLog {
   id: string;

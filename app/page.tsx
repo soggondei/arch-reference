@@ -9,6 +9,7 @@ import { autoTag } from '@/lib/auto-tag';
 import { generateScheduleTemplate } from '@/lib/schedule-template';
 import { autoSyncSchedulesToNotion } from '@/lib/notion-schedule-client';
 import { deadlineLabel, getDDay } from '@/lib/competition-dates';
+import { workspaceSection } from '@/lib/workspace-navigation';
 import ReferenceCard from '@/components/ReferenceCard';
 import FilterPanel from '@/components/FilterPanel';
 import FilterSheet from '@/components/FilterSheet';
@@ -984,7 +985,7 @@ function BookmarkletHandler({ onPrefill }: { onPrefill: (data: Record<string, st
 }
 
 const NAV_ITEMS = [
-  ['office', '사무소 홈'], ['projects', '프로젝트'], ['tasks', '내 업무'], ['attendance', '내 근태'],
+  ['office', '사무소 홈'], ['projects', '프로젝트 관리'], ['schedule', '프로젝트 일정'], ['tasks', '내 업무'], ['attendance', '내 근태'],
   ['refs', '레퍼런스'], ['competitions', '공모전'], ['bids', '입찰정보'],
   ['changwon', '경상남도'], ['links', '링크'],
 ] as const;
@@ -996,9 +997,8 @@ export default function Home() {
 function WorkspacePage() {
   const searchParams = useSearchParams();
   const tab = NAV_ITEMS.find(([key]) => key !== 'attendance' && key === searchParams.get('tab'))?.[0] ?? 'office';
-  const section = searchParams.get('section');
   const calendarView = searchParams.get('view');
-  const isOfficeView = tab === 'office' || tab === 'projects' || tab === 'tasks';
+  const isOfficeView = tab === 'office' || tab === 'projects' || tab === 'schedule' || tab === 'tasks';
   const [refs, setRefs] = useState<Reference[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [filters, setFilters] = useState<FilterState>(INIT_FILTERS);
@@ -1082,7 +1082,7 @@ function WorkspacePage() {
     const saved = await patchOfficeSchedule(...args);
     applyCompetition(refId, saved);
     const task = saved.schedules?.find(item => item.id === taskId);
-    if (task?.notionPageId && (patch.status || 'startDate' in patch || 'endDate' in patch || 'endTime' in patch)) {
+    if (task?.notionPageId && ['status', 'startDate', 'endDate', 'endTime', 'taskName', 'category'].some(key => key in patch)) {
       const projectName = refs.find(ref => ref.id === refId)?.title;
       try {
         const response = await fetch('/api/notion-schedule', {
@@ -1429,8 +1429,10 @@ function WorkspacePage() {
             routeProject={searchParams.get('project') ?? undefined} routeTask={searchParams.get('task') ?? undefined}
             calendarView={calendarView === 'day' || calendarView === 'week' || calendarView === 'year' ? calendarView : 'month'}
             calendarDate={searchParams.get('date') ?? undefined} calendarTaskProject={searchParams.get('taskProject') ?? undefined}
-            section={section === 'report' || section === 'references' || section === 'planning' || section === 'schedule' ? section
-              : section !== 'calendar' && searchParams.has('task') ? 'schedule' : 'calendar'}
+            scheduleLayout={searchParams.get('layout') === 'list' ? 'list' : 'calendar'}
+            scheduleScope={searchParams.get('scope') === 'all' ? 'all' : 'active'}
+            directoryGroup={searchParams.get('group') === 'completed' ? 'completed' : 'active'}
+            section={workspaceSection(tab, searchParams)}
             onActivity={async (id, change) => { upsertWorkspaceRef(await saveProjectActivity(id, change)); }}
             onCreateTask={async (projectId, task) => { const saved = await addOfficeTask(projectId, task); upsertWorkspaceRef(saved); return saved.id; }} />
         ) : tab === 'refs' ? (

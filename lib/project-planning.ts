@@ -29,6 +29,7 @@ type PlanningEdit =
   | { kind: 'setPlan'; budgets: Patch<number>[]; assignments: Patch<PhaseId | null>[] }
   | { kind: 'addPhase'; phase: Phase }
   | { kind: 'saveReview'; review: ReviewInput; previousVersion: number | null; lifecycleRevision: number }
+  | { kind: 'complete'; id: string; day: string; lifecycleRevision: number }
   | { kind: 'reopen'; lifecycleRevision: number };
 export type PlanningChange = { type: 'planning'; edit: PlanningEdit };
 
@@ -147,6 +148,16 @@ export function applyPlanning(data: CompetitionData, edit: PlanningEdit): Compet
   if (data.workspaceKind === 'office') throw new Error('프로젝트를 선택해 주세요.');
   const p = data.planning ?? {};
   const lifecycleRevision = p.lifecycleRevision ?? 0;
+  if (edit.kind === 'complete') {
+    if (data.workspaceKind !== 'project') throw new Error('일반 프로젝트를 선택해 주세요.');
+    if (p.archived) return data;
+    if (edit.lifecycleRevision !== lifecycleRevision || p.closeouts?.some(entry => entry.id === edit.id)) throw new Error(conflict);
+    const stamp = Date.parse(edit.day);
+    if (!safeKey(edit.id) || !Number.isFinite(stamp) || new Date(stamp).toISOString().slice(0, 10) !== edit.day) throw new Error('완료일을 확인해 주세요.');
+    const entry: Closeout = { id: edit.id, day: edit.day, outcome: '종료', phase: null, reason: '', lesson: '', reusable: '', url: '', minutes: null, version: 1 };
+    return { ...data, planning: { ...p, archived: true, lifecycleRevision: lifecycleRevision + 1,
+      currentCloseout: entry.id, closeouts: [...(p.closeouts ?? []), entry] } };
+  }
   if (edit.kind === 'setPlan') {
     const ids = new Set(phasesFor(data).map(phase => phase.id));
     const budgets = patchMap(p.budgets, edit.budgets, (key, n) => ids.has(key) && (n === undefined || Number.isSafeInteger(n) && n>=0));
