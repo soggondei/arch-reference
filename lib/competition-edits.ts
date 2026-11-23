@@ -1,5 +1,21 @@
 import type { CompetitionData, ScheduleItem } from './types';
 
+// Keep actual completion days across reopenings. A deadline alone does not
+// establish when a legacy task was completed.
+export function recordTaskCompletions(before: CompetitionData, after: CompetitionData, day: string): CompetitionData {
+  if (!after.schedules || after.schedules === before.schedules) return after;
+  const previous = new Map(before.schedules?.map(task => [task.id, task]));
+  let changed = false;
+  const schedules = after.schedules.map(task => {
+    if (task.status !== 'done' || previous.get(task.id)?.status === 'done') return task;
+    const completedDates = previous.get(task.id)?.completedDates ?? [];
+    if (completedDates.includes(day)) return task;
+    changed = true;
+    return { ...task, completedDates: [...completedDates, day] };
+  });
+  return changed ? { ...after, schedules } : after;
+}
+
 // Diff the snapshot the user actually edited. A background Notion sync, for
 // example, may have changed only notionPageId on a now-reassigned task.
 function changedFields<T extends object>(before: T, after: T): Partial<T> {

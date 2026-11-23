@@ -13,6 +13,7 @@ import SimilarPanel from '@/components/SimilarPanel';
 import ReferenceConnections from '@/components/ReferenceConnections';
 import ScheduleSection from '@/components/ScheduleSection';
 import Link from 'next/link';
+import { isWorkspaceProject, projectHref } from '@/lib/workspace-navigation';
 
 const TAG_CATEGORIES: TagCategory[] = ['program', 'material', 'mass', 'scale', 'designItem', 'site', 'region'];
 
@@ -335,6 +336,11 @@ export default function ReferencePage() {
                       </div>
                     )}
                   </div>
+                )}
+                {cd && cd.workspaceKind !== 'office' && isWorkspaceProject(ref_) && (
+                  <Link href={projectHref(ref_.id, 'planning')} className="text-xs font-semibold text-emerald-800 underline underline-offset-2">
+                    계획·회고
+                  </Link>
                 )}
                 {/* D-days */}
                 {ddayReg !== null && (

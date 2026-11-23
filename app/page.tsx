@@ -1425,7 +1425,7 @@ function WorkspacePage() {
           loadError && !refs.length ? null :
           <OfficeWorkspace view={tab} refs={refs} onUpdateTask={handleUpdateTask} onCreateProject={handleCreateProject}
             routeProject={searchParams.get('project') ?? undefined} routeTask={searchParams.get('task') ?? undefined}
-            section={section === 'report' || section === 'references' ? section : 'schedule'}
+            section={section === 'report' || section === 'references' || section === 'planning' ? section : 'schedule'}
             onActivity={async (id, change) => { upsertWorkspaceRef(await saveProjectActivity(id, change)); }}
             onCreateTask={async (projectId, task) => { upsertWorkspaceRef(await addOfficeTask(projectId, task)); }} />
         ) : tab === 'refs' ? (

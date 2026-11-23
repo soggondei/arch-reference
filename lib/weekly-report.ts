@@ -38,9 +38,9 @@ function byTime(groups: Map<string, TimeGroup>) {
   return [...groups.values()].sort((a, b) => b.minutes - a.minutes || a.label.localeCompare(b.label, 'ko'));
 }
 
-export function buildWeeklyReport(data: CompetitionData | undefined, day: string) {
+export function buildWeeklyReport(data: CompetitionData | undefined, day: string, sharedLogs: WorkLog[] = []) {
   const [start, end] = weekBounds(day);
-  const logs = entriesInWeek(data?.workLogs ?? [], start, end);
+  const logs = entriesInWeek([...(data?.workLogs ?? []), ...sharedLogs], start, end);
   const feedback = entriesInWeek(data?.feedback ?? [], start, end);
   const schedule = new Map((data?.schedules ?? []).map(task => [task.id, task]));
   const tasks = new Map<string, TimeGroup>();
@@ -60,5 +60,24 @@ export function buildWeeklyReport(data: CompetitionData | undefined, day: string
     start, end, minutes, logCount: logs.length,
     tasks: byTime(tasks), authors: byTime(authors), days: [...days.values()],
     feedback, schedule,
+  };
+}
+
+export function weeklyDecisions(data: CompetitionData | undefined, day: string, today: string) {
+  const [start, end] = weekBounds(day);
+  const ordered = [...(data?.schedules ?? [])].sort((a, b) =>
+    (a.endDate ?? '').localeCompare(b.endDate ?? '') || (a.endTime ?? '').localeCompare(b.endTime ?? '') ||
+    a.taskName.localeCompare(b.taskName, 'ko'));
+  const completed = ordered.flatMap(task => {
+    const dates = task.completedDates?.filter(date => date >= start && date <= end).sort();
+    return dates?.length ? [{ task, date: dates[dates.length - 1] }] : [];
+  }).sort((a, b) => a.date.localeCompare(b.date));
+  const live = start <= today && today <= end && !data?.planning?.archived &&
+    (Boolean(data?.workspaceKind) || !['드롭', '입선', '탈락'].includes(data?.status ?? ''));
+  const open = live ? ordered.filter(task => task.status !== 'done' && task.status !== 'cancelled') : [];
+  return {
+    completed, live, waiting: open.filter(task => task.waitingFor?.trim()),
+    actions: open.filter(task => task.nextAction?.trim()),
+    nextDelivery: open.find(task => task.endDate >= today && (task.isMilestone || task.category === 'external' || task.deliverables?.length)),
   };
 }

@@ -1,7 +1,10 @@
 'use client';
 
 import { useRef, useState, type FormEvent } from 'react';
+import Link from 'next/link';
 import type { ProjectActivityChange, Reference, ScheduleItem, TaskFeedback, WorkLog } from '@/lib/types';
+import DrawingDetails, { DrawingFields, readDrawingFields } from './DrawingDetails';
+import TaskDeliverables from './TaskDeliverables';
 import styles from './TaskJournal.module.css';
 
 type Editor =
@@ -13,6 +16,7 @@ interface Props {
   project: Reference;
   task: ScheduleItem;
   member: string;
+  sharedLogs?: WorkLog[];
   today: string;
   onActivity: (projectId: string, change: ProjectActivityChange) => Promise<void>;
   onOpenTask: (projectId: string, taskId: string) => void;
@@ -70,7 +74,9 @@ function EntryForm({ editor, task, logs, member, today, save, close }: {
         }
         change = { type: 'saveLog', log: { ...entry, minutes }, previous };
       } else {
-        change = { type: 'addFeedback', feedback: { ...entry, workLogId: value('logId') || undefined } };
+        change = { type: 'addFeedback', feedback: {
+          ...entry, workLogId: value('logId') || undefined, reviewedDrawing: readDrawingFields(form),
+        } };
       }
     }
     submitting.current = true;
@@ -107,6 +113,7 @@ function EntryForm({ editor, task, logs, member, today, save, close }: {
           <label className={styles.full}>{editor.kind === 'log' ? '작업 내용' : '피드백 내용'}
             <textarea name="body" rows={3} maxLength={4000} required defaultValue={previous?.body ?? ''} />
           </label>
+          {editor.kind === 'feedback' && <details className={styles.full}><summary>검토 도면 추가</summary><div className={styles.drawingInputs}><DrawingFields /></div></details>}
           <p className={`${styles.full} ${styles.meta}`}>저장한 기록은 이 앱을 열 수 있는 사람에게 표시됩니다.</p>
         </>}
         <div className={styles.actions}>
@@ -119,15 +126,20 @@ function EntryForm({ editor, task, logs, member, today, save, close }: {
   );
 }
 
-export default function TaskJournal({ project, task, member, today, onActivity, onOpenTask }: Props) {
+export default function TaskJournal({ project, task, member, today, sharedLogs = [], onActivity, onOpenTask }: Props) {
   const [editor, setEditor] = useState<Editor | null>(null);
   const [notice, setNotice] = useState('');
   const data = project.competitionData!;
-  const logs = (data.workLogs ?? []).filter(log => log.taskId === task.id).reverse().sort((a,b) => b.date.localeCompare(a.date));
+  const shared = sharedLogs.filter(log => log.taskId === task.id);
+  const sharedIds = new Set(shared.map(log => log.id));
+  const logs = (data.workLogs ?? []).filter(log => log.taskId === task.id && !sharedIds.has(log.id));
+  const allLogs = [...logs, ...shared].reverse().sort((a,b) => b.date.localeCompare(a.date));
   const feedback = (data.feedback ?? []).filter(item => item.taskId === task.id).reverse().sort((a,b) => b.date.localeCompare(a.date));
   const source = data.feedback?.find(item => item.followUpTaskId === task.id);
   const schedules = data.schedules ?? [];
-  const totalMinutes = logs.reduce((sum, log) => sum + log.minutes, 0);
+  const totalMinutes = allLogs.reduce((sum, log) => sum + log.minutes, 0);
+  const saveDetail = (change: ProjectActivityChange) => onActivity(project.id, change);
+  const attendanceUrl = '/attendance?project=' + encodeURIComponent(project.id) + '&task=' + encodeURIComponent(task.id);
 
   function open(next: Editor) { setNotice(''); setEditor(next); }
   function addLog() { open({ kind: 'log', id: crypto.randomUUID() }); }
@@ -144,23 +156,27 @@ export default function TaskJournal({ project, task, member, today, onActivity, 
     <div className={styles.journal}>
       {source && <div className={styles.origin}>
         <span>이 업무를 만든 피드백</span><p>{source.body}</p>
+        <DrawingDetails item={source} field="reviewedDrawing" />
+        <DrawingDetails item={source} field="resultDrawing" save={saveDetail} />
         {schedules.some(item => item.id === source.taskId) ?
           <button type="button" onClick={() => onOpenTask(project.id, source.taskId)}>원래 업무 열기 · {source.taskName}</button> :
           <small>원래 업무 · {source.taskName} (삭제됨)</small>}
       </div>}
+      <TaskDeliverables task={task} save={saveDetail} />
       <section aria-label="업무일지">
-        <div className={styles.head}><h3>업무일지 <small>{logs.length}건 · {duration(totalMinutes)}</small></h3>
+        <div className={styles.head}><h3>업무일지 <small>{allLogs.length}건 · {duration(totalMinutes)}</small></h3>
+          <Link className={styles.textAction} href={attendanceUrl}>내 근태와 함께 기록</Link>
           <button type="button" className={styles.secondary} disabled={!!editor} onClick={addLog}>일지 작성</button>
         </div>
         {editor?.kind === 'log' && form}
-        {!logs.length && editor?.kind !== 'log' && <p className={styles.empty}>기록된 업무일지가 없습니다.</p>}
-        {logs.map(log => <article className={styles.entry} key={log.id}>
-          <div className={styles.meta}><time dateTime={log.date}>{log.date}</time><span>{log.author}</span><b>{duration(log.minutes)}</b></div>
+        {!allLogs.length && editor?.kind !== 'log' && <p className={styles.empty}>기록된 업무일지가 없습니다.</p>}
+        {allLogs.map(log => <article className={styles.entry} key={log.id}>
+          <div className={styles.meta}><time dateTime={log.date}>{log.date}</time><span>{log.author}</span>{sharedIds.has(log.id) && <span>내 근태에서 공유</span>}<b>{duration(log.minutes)}</b></div>
           <p className={styles.body}>{log.body}</p>
-          <div className={styles.entryActions}>
+          {!sharedIds.has(log.id) && <div className={styles.entryActions}>
             <button type="button" disabled={!!editor} onClick={() => open({ kind: 'log', id: log.id, previous: log })}>일지 수정</button>
             <button type="button" disabled={!!editor} onClick={() => addFeedback(log.id)}>이 일지에 피드백</button>
-          </div>
+          </div>}
         </article>)}
       </section>
       <section aria-label="피드백">
@@ -176,6 +192,8 @@ export default function TaskJournal({ project, task, member, today, onActivity, 
             <div className={styles.meta}><time dateTime={item.date}>{item.date}</time><span>{item.author}</span></div>
             {log && <p className={styles.quote}>관련 일지 · {log.date} {log.author} · {log.body}</p>}
             <p className={styles.body}>{item.body}</p>
+            <DrawingDetails item={item} field="reviewedDrawing" save={saveDetail} />
+            <DrawingDetails item={item} field="resultDrawing" />
             <div className={styles.entryActions}>{followUp ?
               <button type="button" onClick={() => onOpenTask(project.id, followUp.id)}>후속 업무 열기 · {followUp.taskName}</button> :
               item.followUpTaskId ? <small>연결된 후속 업무가 삭제되었습니다.</small> :

@@ -1,8 +1,10 @@
 import { supabase } from './supabase';
 import type { Reference, Collection, CompetitionData, BidParticipation, OfficeSchedulePatch, ScheduleItem, ProjectActivityChange } from './types';
 import { normalizeRegistrationSchedule } from './competition-dates';
-import { mergeCompetitionEdit } from './competition-edits';
+import { mergeCompetitionEdit, recordTaskCompletions } from './competition-edits';
+import { attendanceDate } from './attendance';
 import { applyProjectActivity } from './project-activity';
+import { applyPlanning, trackCompetitionTransition } from './project-planning';
 
 // ── Row mappers ─────────────────────────────────────────────────────────────
 
@@ -91,7 +93,8 @@ async function editCompetition(id: string, edit: (current: CompetitionData) => C
     if (readError) throw readError;
     const ref = toRef(row);
     if (!ref.competitionData) throw new Error('프로젝트를 찾을 수 없습니다.');
-    const next = normalizeRegistrationSchedule(edit(ref.competitionData));
+    const edited = normalizeRegistrationSchedule(edit(ref.competitionData));
+    const next = recordTaskCompletions(ref.competitionData, edited, attendanceDate(new Date()));
     if (JSON.stringify(next) === JSON.stringify(row.competition_data)) return ref;
 
     const revision = ref.competitionData.scheduleRevision;
@@ -111,11 +114,20 @@ async function editCompetition(id: string, edit: (current: CompetitionData) => C
 }
 
 export async function updateCompetitionStatus(id: string, next: CompetitionData, before: CompetitionData): Promise<CompetitionData> {
-  const saved = await editCompetition(id, current => mergeCompetitionEdit(current, before, next));
+  const transition = before.status !== next.status
+    ? { id: crypto.randomUUID(), day: new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date()) } : null;
+  const saved = await editCompetition(id, current => {
+    if (transition && current.status !== before.status && current.status !== next.status) {
+      throw new Error('공모 상태가 변경되었습니다. 최신 상태를 확인해 주세요.');
+    }
+    const merged = mergeCompetitionEdit(current, before, next);
+    return transition ? trackCompetitionTransition(current, merged, transition.id, transition.day) : merged;
+  });
   return saved.competitionData!;
 }
 
 export async function saveProjectActivity(projectId: string, change: ProjectActivityChange): Promise<Reference> {
+  if (change.type === 'planning') return editCompetition(projectId, current => applyPlanning(current, change.edit));
   if (change.type === 'linkReference') {
     const { data, error } = await supabase.from('refs').select('id, ref_type')
       .eq('id', change.referenceId).is('competition_data', null).maybeSingle();

@@ -1,3 +1,5 @@
+import type { PlanningChange, ProjectPlan } from './project-planning';
+
 export type RefType = 'built' | 'winner' | 'entry' | 'idea' | 'link';
 
 export const REF_TYPE_LABEL: Record<RefType, string> = {
@@ -91,11 +93,29 @@ export interface ScheduleItem {
   status: ScheduleStatus;
   assignee?: string;
   reviewRequested?: boolean;
+  completedDates?: string[];
+  waitingFor?: string;
+  nextAction?: string;
   isMilestone?: boolean;
   notionPageId?: string;
+  deliverables?: TaskDeliverable[];
 }
 
-export type OfficeSchedulePatch = Partial<Pick<ScheduleItem, 'status' | 'assignee' | 'reviewRequested'>>;
+export interface TaskDeliverable {
+  id: string;
+  title: string;
+  criteria: string;
+  checked: boolean;
+}
+
+export interface DrawingRecord {
+  number: string;
+  version: string;
+  url: string;
+  note?: string;
+}
+
+export type OfficeSchedulePatch = Partial<Pick<ScheduleItem, 'status' | 'assignee' | 'reviewRequested' | 'waitingFor' | 'nextAction'>>;
 
 export interface WorkLog {
   id: string;
@@ -116,21 +136,28 @@ export interface TaskFeedback {
   body: string;
   workLogId?: string;
   followUpTaskId?: string;
+  reviewedDrawing?: DrawingRecord;
+  resultDrawing?: DrawingRecord;
 }
 
 export interface ProjectReferenceLink {
   referenceId: string;
   note: string;
+  decision?: string;
 }
 
 export type ProjectActivityChange =
+  | PlanningChange
+  | { type: 'deliverable'; taskId: string; id: string; value?: TaskDeliverable; previous?: TaskDeliverable }
+  | { type: 'drawing'; feedbackId: string; field: 'reviewedDrawing' | 'resultDrawing'; value?: DrawingRecord; previous?: DrawingRecord }
   | { type: 'saveLog'; log: WorkLog; previous?: WorkLog }
   | { type: 'addFeedback'; feedback: TaskFeedback }
   | { type: 'followUp'; feedbackId: string; task: ScheduleItem }
-  | { type: 'linkReference'; referenceId: string; note: string; previousNote?: string }
-  | { type: 'unlinkReference'; referenceId: string; previousNote?: string };
+  | { type: 'linkReference'; referenceId: string; note: string; previousNote?: string; decision?: string; previousDecision?: string }
+  | { type: 'unlinkReference'; referenceId: string; previousNote?: string; previousDecision?: string };
 
 export interface CompetitionData {
+  planning?: ProjectPlan;
   status: CompetitionStatus;
   workspaceKind?: 'project' | 'office';
   pm?: string;

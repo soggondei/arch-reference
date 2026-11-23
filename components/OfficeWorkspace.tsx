@@ -7,6 +7,8 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEv
 import { isDroppedCompetition, SCHEDULE_CATEGORY_LABEL, SCHEDULE_STATUS_LABEL } from '@/lib/types';
 import type { OfficeSchedulePatch, ProjectActivityChange, Reference, ScheduleCategory, ScheduleItem, ScheduleStatus } from '@/lib/types';
 import ProjectWeeklyReport from './ProjectWeeklyReport';
+import ProjectPlanning from './ProjectPlanning';
+import { useProjectSharedLogs } from '@/lib/project-shared-work';
 import ReferenceConnections from './ReferenceConnections';
 import { isWorkspaceProject, projectHref, type ProjectSection } from '@/lib/workspace-navigation';
 import { weekBounds } from '@/lib/weekly-report';
@@ -27,10 +29,10 @@ interface WorkspaceProps {
 }
 
 type TaskRow = { project: Reference; task: ScheduleItem };
-type Queue = 'all' | 'week' | 'overdue' | 'review';
+type Queue = 'all' | 'week' | 'overdue' | 'review' | 'waiting';
 type Ownership = 'mine' | 'unassigned' | 'all';
 const queueLabels: Record<Queue, string> = {
-  all: '전체 일정', week: '이번 주 마감', overdue: '기한 경과', review: '검토 대기',
+  all: '전체 일정', week: '이번 주 마감', overdue: '기한 경과', review: '검토 대기', waiting: '답변 대기',
 };
 const headings: Record<OfficeView, string> = { office: '사무소 홈', projects: '프로젝트', tasks: '내 업무' };
 const memberKey = 'lv-lab:workspace-member';
@@ -71,6 +73,7 @@ function overdue(task: ScheduleItem, today: string, time: string) {
 }
 
 function activeProject(project: Reference) {
+  if (project.competitionData?.planning?.archived) return false;
   return Boolean(project.competitionData?.workspaceKind) ||
     (!isDroppedCompetition(project.competitionData) && !['탈락', '입선'].includes(project.competitionData?.status ?? ''));
 }
@@ -78,7 +81,7 @@ function activeProject(project: Reference) {
 function projectKind(project: Reference) {
   const data = project.competitionData!;
   if (data.workspaceKind === 'office') return '공통 업무';
-  if (data.workspaceKind === 'project') return '사무소 프로젝트';
+  if (data.workspaceKind === 'project') return data.planning?.archived ? '종료 프로젝트' : '사무소 프로젝트';
   return data.status;
 }
 
@@ -93,6 +96,8 @@ function TaskEditor({ row, member, update, close, onSaved }: {
   const [status, setStatus] = useState(task.status);
   const [assignee, setAssignee] = useState(task.assignee ?? '');
   const [review, setReview] = useState(Boolean(task.reviewRequested));
+  const [waiting, setWaiting] = useState(task.waitingFor ?? '');
+  const [nextAction, setNextAction] = useState(task.nextAction ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const closed = status === 'done' || status === 'cancelled';
@@ -102,6 +107,8 @@ function TaskEditor({ row, member, update, close, onSaved }: {
     const patch: OfficeSchedulePatch = {};
     if (status !== task.status) patch.status = status;
     if (assignee.trim() !== (task.assignee ?? '')) patch.assignee = assignee.trim();
+    if (waiting.trim() !== (task.waitingFor ?? '')) patch.waitingFor = waiting.trim();
+    if (nextAction.trim() !== (task.nextAction ?? '')) patch.nextAction = nextAction.trim();
     if ((!closed && review) !== Boolean(task.reviewRequested)) patch.reviewRequested = !closed && review;
     if (!Object.keys(patch).length) { close(); return; }
     setSaving(true);
@@ -128,6 +135,8 @@ function TaskEditor({ row, member, update, close, onSaved }: {
           </select>
         </label>
         <label className={styles.check}><input type="checkbox" checked={!closed && review} disabled={closed} onChange={e => setReview(e.target.checked)} />검토 요청</label>
+        <label>기다리는 답변<input value={waiting} onChange={e => setWaiting(e.target.value)} maxLength={300} placeholder="예: 구조팀 단면 검토 회신" /></label>
+        <label>다음 행동<input value={nextAction} onChange={e => setNextAction(e.target.value)} maxLength={300} placeholder="예: 단면 수정본 전달" /></label>
         <div className={styles.actions}>
           <button type="button" className={styles.secondary} onClick={close}>취소</button>
           <button className={styles.primary} type="submit">{saving ? '저장 중…' : '저장'}</button>
@@ -136,6 +145,24 @@ function TaskEditor({ row, member, update, close, onSaved }: {
       {error && <p role="alert" className={styles.error}>{error}</p>}
     </form>
   );
+}
+
+function JournalWithSharedTime(props: React.ComponentProps<typeof TaskJournal>) {
+  const shared = useProjectSharedLogs(props.project.id);
+  return <>
+    {shared.loading && <p className={styles.notice} role="status">공유 업무시간을 불러오는 중입니다.</p>}
+    {shared.error && <p className={styles.error} role="alert">개인 근태에서 공유한 시간이 누계에서 빠져 있습니다. <button type="button" onClick={shared.retry}>다시 불러오기</button></p>}
+    <TaskJournal {...props} sharedLogs={shared.logs} />
+  </>;
+}
+
+function ProjectWorkView({ project, relatedProjects, section, today, onActivity, onOpenTask }: {
+  project: Reference; relatedProjects: Reference[]; section: 'report' | 'planning'; today: string;
+  onActivity: WorkspaceProps['onActivity']; onOpenTask: (id: string) => void;
+}) {
+  const shared = useProjectSharedLogs(project.id);
+  if (section === 'planning') return <ProjectPlanning project={project} today={today} shared={shared} onActivity={onActivity} relatedProjects={relatedProjects} />;
+  return <ProjectWeeklyReport project={project} today={today} onOpenTask={onOpenTask} shared={shared} />;
 }
 
 function TaskList({ rows, today, time, member, update, notify, onActivity, onOpenTask, initialTaskId }: {
@@ -159,7 +186,8 @@ function TaskList({ rows, today, time, member, update, notify, onActivity, onOpe
           const { task, project } = row;
           const isEditing = editing?.task.id === task.id && editing.project.id === project.id;
           const dropped = isDroppedCompetition(project.competitionData);
-          const isLate = !dropped && overdue(task, today, time);
+          const isActive = activeProject(project);
+          const isLate = isActive && overdue(task, today, time);
           return (
             <li key={project.id + '/' + task.id}>
               <button type="button" className={styles.taskRow} aria-label={task.taskName + ' 편집, ' + project.title}
@@ -176,13 +204,14 @@ function TaskList({ rows, today, time, member, update, notify, onActivity, onOpe
                 <span className={styles.owner}>{task.assignee || '미배정'}</span>
                 <span className={styles.statuses}>
                   <span className={styles.badge} data-status={task.status}>{SCHEDULE_STATUS_LABEL[task.status]}</span>
-                  {!dropped && task.reviewRequested && openTask(task) && <span className={styles.review}>검토 대기</span>}
+                  {isActive && task.reviewRequested && openTask(task) && <span className={styles.review}>검토 대기</span>}
+                  {isActive && task.waitingFor && openTask(task) && <span className={styles.review}>답변 대기</span>}
                 </span>
               </button>
               {isEditing && <>
                 <TaskEditor row={editing} member={member} update={update} close={() => setEditing(null)}
                   onSaved={() => { setEditing(null); notify('업무를 저장했습니다.'); }} />
-                <TaskJournal project={project} task={task} today={today} member={member} onActivity={onActivity} onOpenTask={onOpenTask} />
+                <JournalWithSharedTime project={project} task={task} today={today} member={member} onActivity={onActivity} onOpenTask={onOpenTask} />
               </>}
             </li>
           );
@@ -270,7 +299,7 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
   const [notice, setNotice] = useState('');
   const [monday, sunday] = weekBounds(today);
   const projects = useMemo(() => refs.filter(isWorkspaceProject).sort((a, b) => {
-    const rank = (p: Reference) => p.competitionData?.status === '작업중' ? 0 : activeProject(p) ? 1 : 2;
+    const rank = (p: Reference) => activeProject(p) ? (p.competitionData?.status === '작업중' ? 0 : 1) : 2;
     return rank(a) - rank(b) || a.title.localeCompare(b.title, 'ko');
   }), [refs]);
   const rows = useMemo(() => projects.flatMap(project =>
@@ -284,12 +313,13 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
   const projectRows = rows.filter(row => row.project.id === currentProject?.id);
   const nextTask = projectRows.find(({ task }) => openTask(task) && !overdue(task, today, time))?.task;
   const scoped = rows.filter(row => scope === 'all' || (scope === 'active' ? activeProject(row.project) : row.project.id === scope));
-  const pending = scoped.filter(({ project, task }) => !isDroppedCompetition(project.competitionData) && openTask(task));
+  const pending = scoped.filter(({ project, task }) => activeProject(project) && openTask(task));
   const byQueue: Record<Queue, TaskRow[]> = {
     all: scoped,
     week: pending.filter(({ task }) => task.endDate >= monday && task.endDate <= sunday),
     overdue: pending.filter(({ task }) => overdue(task, today, time)),
     review: pending.filter(({ task }) => task.reviewRequested),
+    waiting: pending.filter(({ task }) => task.waitingFor?.trim()),
   };
   const owned = scoped.filter(({ task }) => ownershipFilter === 'all' ||
     (ownershipFilter === 'mine' ? Boolean(member) && task.assignee === member : !task.assignee));
@@ -345,7 +375,7 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
         </select></label>
       </div>}
       {view === 'office' && <div className={styles.cards}>
-        {(['week', 'overdue', 'review', 'all'] as Queue[]).map(key => <button type="button" key={key} aria-pressed={homeQueue === key}
+        {(['week', 'overdue', 'review', 'waiting', 'all'] as Queue[]).map(key => <button type="button" key={key} aria-pressed={homeQueue === key}
           className={styles.card} onClick={() => { setHomeQueue(key); setFilter(''); }}>
           <span>{queueLabels[key]}</span><strong>{byQueue[key].length}<small>건</small></strong>
           {key === 'week' && <small>{monday.slice(5).replace('-', '.')} – {sunday.slice(5).replace('-', '.')}</small>}
@@ -372,16 +402,16 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
           {view === 'projects' && currentProject && <div className={styles.projectInfo}>
             <p>{projectKind(currentProject)}{currentProject.competitionData?.pm && ' · PM ' + currentProject.competitionData.pm}</p>
             <h2>{currentProject.title}</h2>
-            {!isDroppedCompetition(currentProject.competitionData) && <p className={styles.next}>다음 마감 <strong>{nextTask ? nextTask.taskName + ' · ' + dueLabel(nextTask) : '예정 없음'}</strong></p>}
+            {activeProject(currentProject) && <p className={styles.next}>다음 마감 <strong>{nextTask ? nextTask.taskName + ' · ' + dueLabel(nextTask) : '예정 없음'}</strong></p>}
             {!currentProject.competitionData?.workspaceKind && <Link href={'/reference/' + encodeURIComponent(currentProject.id)}>공모 상세 보기 →</Link>}
           </div>}
           {view === 'projects' && currentProject && <nav className={styles.projectSections} aria-label="프로젝트 상세 메뉴">
-            {([['schedule','업무 일정'], ['report','주간 리포트'], ['references','레퍼런스']] as const).map(([key, label]) =>
+            {([['schedule','업무 일정'], ['report','주간 리포트'], ['planning','계획·회고'], ['references','레퍼런스']] as const).filter(([key]) => key !== 'planning' || currentProject.competitionData?.workspaceKind !== 'office').map(([key, label]) =>
               <Link key={key} href={projectHref(currentProject.id, key)} scroll={false} aria-current={section === key ? 'page' : undefined}>{label}</Link>
             )}
           </nav>}
-          {view === 'projects' && currentProject && section === 'report'
-            ? <ProjectWeeklyReport key={currentProject.id} project={currentProject} today={today}
+          {view === 'projects' && currentProject && (section === 'report' || section === 'planning')
+            ? <ProjectWorkView key={currentProject.id} project={currentProject} relatedProjects={projects} section={section} today={today} onActivity={onActivity}
                 onOpenTask={taskId => navigateProject(currentProject.id, 'schedule', taskId)} />
             : view === 'projects' && currentProject && section === 'references'
               ? <ReferenceConnections key={currentProject.id} context="project" anchor={currentProject} refs={refs} onActivity={onActivity} />

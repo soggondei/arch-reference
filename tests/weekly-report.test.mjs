@@ -1,6 +1,32 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildWeeklyReport, durationLabel, weekBounds } from '../lib/weekly-report.ts';
+import { buildWeeklyReport, durationLabel, weekBounds, weeklyDecisions } from '../lib/weekly-report.ts';
+
+test('weekly decisions use recorded completion days and only show current open actions for active projects', () => {
+  const base = {taskName:'평면',endDate:'2026-11-25',category:'design',status:'planned'};
+  const data = {status:'작업중',schedules:[
+    {...base,id:'legacy',status:'done'}, {...base,id:'finished',status:'done',completedDates:['2026-11-23']},
+    {...base,id:'reply',waitingFor:'구조 회신',nextAction:'도면 검토'},
+    {...base,id:'delivery',isMilestone:true},
+  ]};
+  const now = weeklyDecisions(data,'2026-11-23','2026-11-23');
+  assert.deepEqual(now.completed.map(x=>x.task.id), ['finished']);
+  assert.deepEqual(now.waiting.map(x=>x.id), ['reply']);
+  assert.deepEqual(now.actions.map(x=>x.id), ['reply']);
+  assert.equal(now.nextDelivery.id,'delivery');
+  assert.equal(weeklyDecisions(data,'2026-11-15','2026-11-23').live,false);
+  assert.equal(weeklyDecisions({...data,status:'드롭'},'2026-11-23','2026-11-23').live,false);
+  assert.equal(weeklyDecisions({...data,workspaceKind:'project',planning:{archived:true}},'2026-11-23','2026-11-23').live,false);
+});
+
+test('a shared time entry is included once together with existing project logs', () => {
+  const baseline = {id:'office-log',date:'2026-11-23',author:'기존',taskId:'plan',taskName:'도면작업',minutes:60,body:'평면 검토'};
+  const shared = {...baseline,id:'personal:shared',author:'사무소 대표',minutes:90};
+  const d = {workLogs:[baseline]};
+  assert.equal(buildWeeklyReport(d,baseline.date,[shared,shared]).minutes,150);
+  assert.equal(buildWeeklyReport(d,baseline.date,[{...shared,minutes:30}]).minutes,90);
+  assert.equal(buildWeeklyReport(d,baseline.date,[]).minutes,60);
+});
 
 test('uses Monday to Sunday across month, leap-day, and year boundaries', () => {
   assert.deepEqual(weekBounds('2027-01-03'), ['2026-12-28', '2027-01-03']);

@@ -1,6 +1,6 @@
 import type { Reference } from './types';
 
-export type ProjectSection = 'schedule' | 'report' | 'references';
+export type ProjectSection = 'schedule' | 'report' | 'references' | 'planning';
 
 export function isWorkspaceProject(ref: Reference) {
   const data = ref.competitionData;
