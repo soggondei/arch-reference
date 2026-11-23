@@ -6,6 +6,20 @@ const print = { id: 'print', taskName: '인쇄물 점검', category: 'admin', st
 const bind = { ...print, id: 'bind', taskName: '제출물 제본', endDate: '2026-11-25' };
 const before = { status: '작업중', schedules: [print, bind] };
 
+test('dropping and resuming a competition preserves concurrent work and its existing Notion links', () => {
+  const current = {
+    ...before,
+    notionPageId: 'project-page',
+    schedules: [{ ...print, assignee: '담당자', notionPageId: 'task-page' }, bind],
+    workLogs: [{ id: 'log', taskId: print.id, taskName: print.taskName, author: '담당자', date: print.endDate, minutes: 45, body: '검토 완료' }],
+    feedback: [{ id: 'feedback', taskId: print.id, taskName: print.taskName, author: '담당자', date: print.endDate, body: '서체 확인', workLogId: 'log' }],
+    referenceLinks: [{ referenceId: 'ref', note: '표지 참고' }],
+  };
+  const dropped = mergeCompetitionEdit(current, before, { ...before, status: '드롭' });
+  assert.deepEqual(dropped, { ...current, status: '드롭' });
+  assert.deepEqual(mergeCompetitionEdit(dropped, dropped, { ...dropped, status: '작업중' }), current);
+});
+
 test('a stale Notion sync only applies its new page IDs and preserves office changes', () => {
   const current = { ...before, scheduleRevision: 4, schedules: [{ ...print, status: 'done', assignee: '담당자' }, bind] };
   const synced = { ...before, schedules: [{ ...print, notionPageId: 'page' }, bind] };

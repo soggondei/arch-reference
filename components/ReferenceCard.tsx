@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Reference, Collection, REF_TYPE_LABEL, REF_TYPE_COLOR, RefType, COMPETITION_STATUS_COLOR } from '@/lib/types';
+import { Reference, Collection, REF_TYPE_LABEL, REF_TYPE_COLOR, RefType, COMPETITION_STATUS_COLOR, isDroppedCompetition } from '@/lib/types';
 import TagBadge from './TagBadge';
 import Link from 'next/link';
 
@@ -40,7 +40,7 @@ export default function ReferenceCard({ ref_, collections, onDelete, onEdit, onC
 
   const cd = ref_.competitionData;
   const dday = (() => {
-    if (!cd?.submissionDate) return null;
+    if (!cd?.submissionDate || isDroppedCompetition(cd)) return null;
     const matches = cd.submissionDate.match(/\d{4}-\d{2}-\d{2}/g);
     if (!matches) return null;
     const deadline = new Date([...matches].sort().pop()! + 'T00:00:00');

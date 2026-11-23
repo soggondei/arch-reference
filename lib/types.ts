@@ -19,7 +19,9 @@ export const REF_TYPE_COLOR: Record<RefType, string> = {
 export const LINK_CATEGORIES = ['설계도구', '법규/정보', '재료/제품', '공모/입찰', '레퍼런스', '기타'] as const;
 export type LinkCategory = typeof LINK_CATEGORIES[number];
 
-export const COMPETITION_STATUSES = ['관심', '등록예정', '등록완료', '작업중', '제출완료', '입선', '탈락'] as const;
+export const ACTIVE_COMPETITION_STATUSES = ['관심', '등록예정', '등록완료', '작업중', '제출완료'] as const;
+export const COMPETITION_RESULTS = ['입선', '탈락'] as const;
+export const COMPETITION_STATUSES = [...ACTIVE_COMPETITION_STATUSES, ...COMPETITION_RESULTS, '드롭'] as const;
 export type CompetitionStatus = typeof COMPETITION_STATUSES[number];
 
 export const COMPETITION_STATUS_COLOR: Record<CompetitionStatus, string> = {
@@ -30,7 +32,12 @@ export const COMPETITION_STATUS_COLOR: Record<CompetitionStatus, string> = {
   '제출완료': '#eab308',
   '입선':    '#22c55e',
   '탈락':    '#ef4444',
+  '드롭':    '#475569',
 };
+
+export function isDroppedCompetition(data?: CompetitionData) {
+  return data?.status === '드롭' && !data.workspaceKind;
+}
 
 export const BID_PARTICIPATION_STATUSES = ['참가예정', '참가완료', '패스'] as const;
 export type BidParticipationStatus = typeof BID_PARTICIPATION_STATUSES[number];
