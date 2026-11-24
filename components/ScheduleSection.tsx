@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import {
   ScheduleItem, ScheduleCategory, ScheduleStatus,
   SCHEDULE_CATEGORY_LABEL, SCHEDULE_STATUS_LABEL,
   CompetitionData,
 } from '@/lib/types';
-import { generateScheduleTemplate } from '@/lib/schedule-template';
+import { projectHref } from '@/lib/workspace-navigation';
 import { patchNotionRegistrationDate, syncNotionSchedule } from '@/lib/notion-schedule-client';
 import { getDeadlineDate } from '@/lib/competition-dates';
 
@@ -42,23 +43,12 @@ function isLinkedRegistration(item: ScheduleItem, cd: CompetitionData) {
     item.endDate === getDeadlineDate(cd.registrationDate));
 }
 
-export default function ScheduleSection({ projectName, competitionData, onUpdate }: Props) {
+export default function ScheduleSection({ refId, projectName, competitionData, onUpdate }: Props) {
   const schedules = competitionData.schedules ?? [];
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [addForm, setAddForm] = useState({ taskName: '', category: 'design' as ScheduleCategory, startDate: '', endDate: '', status: 'planned' as ScheduleStatus });
-
-  async function handleGenerateTemplate() {
-    if (schedules.length > 0 && !confirm('기존 스케줄을 덮어씁니다. 계속할까요?')) return;
-    const generated = generateScheduleTemplate({
-      submissionDate: competitionData.submissionDate,
-      registrationDate: competitionData.registrationDate,
-      announcementDate: competitionData.announcementDate,
-      resultDate: competitionData.resultDate,
-    });
-    await onUpdate(generated);
-  }
 
   async function handleStatusCycle(item: ScheduleItem) {
     const idx = STATUSES.indexOf(item.status);
@@ -175,7 +165,6 @@ export default function ScheduleSection({ projectName, competitionData, onUpdate
     setShowAddForm(false);
   }
 
-  const hasSubmission = !!competitionData.submissionDate;
   const syncedCount = schedules.filter(s => s.notionPageId).length;
 
   return (
@@ -213,21 +202,10 @@ export default function ScheduleSection({ projectName, competitionData, onUpdate
           >
             + 항목 추가
           </button>
-          {!hasSubmission ? null : schedules.length === 0 ? (
-            <button
-              onClick={() => void handleGenerateTemplate()}
-              className="text-xs bg-zinc-900 text-white px-2.5 py-1 rounded-lg hover:bg-zinc-700 whitespace-nowrap"
-            >
-              템플릿 생성
-            </button>
-          ) : (
-            <button
-              onClick={() => void handleGenerateTemplate()}
-              className="text-xs text-zinc-400 hover:text-zinc-600 underline whitespace-nowrap"
-            >
-              재생성
-            </button>
-          )}
+          {competitionData.workspaceKind !== 'office' && <Link href={projectHref(refId, 'process')}
+            className="text-xs font-medium text-emerald-800 underline underline-offset-2 whitespace-nowrap">
+            프로젝트 진행 설정
+          </Link>}
         </div>
       </div>
 
@@ -282,7 +260,7 @@ export default function ScheduleSection({ projectName, competitionData, onUpdate
       {schedules.length === 0 ? (
         <div className="px-4 py-6 text-center">
           <p className="text-xs text-zinc-300">
-            {hasSubmission ? '"템플릿 생성"으로 자동 일정을 만들거나 직접 추가하세요' : '작품접수 날짜를 먼저 입력하면 템플릿을 자동 생성할 수 있습니다'}
+            등록된 일정이 없습니다.
           </p>
         </div>
       ) : (

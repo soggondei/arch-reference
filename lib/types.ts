@@ -1,4 +1,5 @@
 import type { PlanningChange, ProjectPlan } from './project-planning';
+import type { ProcessDefaults, ProcessDraft, ProcessLibrary } from './process-template';
 
 export type RefType = 'built' | 'winner' | 'entry' | 'idea' | 'link';
 
@@ -85,6 +86,9 @@ export const SCHEDULE_STATUS_LABEL: Record<ScheduleStatus, string> = {
 
 export interface ScheduleItem {
   id: string;
+  processTemplateId?: string;
+  processStepId?: string;
+  processDefaults?: ProcessDefaults;
   taskName: string;
   category: ScheduleCategory;
   startDate?: string;
@@ -160,6 +164,9 @@ export type ProjectActivityChange =
   | { type: 'unlinkReference'; referenceId: string; previousNote?: string; previousDecision?: string };
 
 export interface CompetitionData {
+  processTemplateId?: string;
+  processDrafts?: ProcessDraft[];
+  processLibrary?: ProcessLibrary;
   planning?: ProjectPlan;
   projectColor?: string;
   status: CompetitionStatus;

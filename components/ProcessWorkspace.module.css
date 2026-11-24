@@ -1,0 +1,57 @@
+.library, .setup { color: #23322c; min-width: 0; }
+.library { padding: 1rem; margin-top: 1rem; border: 1px solid #d3dfd8; border-radius: 9px; background: #f7faf8; }
+.setup { padding: 1rem; }
+.heading, .bottom, .controls, .actions, .anchor, .stepHead, .stepFields, .rowActions, .dateFields { display: flex; align-items: center; gap: .55rem; flex-wrap: wrap; }
+.heading, .bottom, .stepHead { justify-content: space-between; }
+.hint { margin-block: .25rem; font-size: .79rem; line-height: 1.55; color: #52635b; }
+.controls, .anchor { align-items: flex-end; }
+.manager, .editor, .preview, .changes { margin-top: .8rem; }
+.editor fieldset { min-width: 0; }
+.setup > .label { margin-top: .85rem; max-width: 24rem; }
+.label, .stepFields label, .stage, .dateFields label, .endDate { display: grid; gap: .22rem; min-width: 0; color: #4f6358; font-weight: 550; font-size: .76rem; }
+.label select, .label input, .steps input, .steps select, .dates input { width: 100%; }
+.controls .label { min-width: min(14rem, 100%); }
+.library input, .setup input, .library select, .setup select { border: 1px solid #c8d6cd; border-radius: 6px; padding: .46rem .6rem; background: #fff; color: #24352b; }
+.quiet, .primary, .rowActions button { border: 1px solid #c4d3c9; border-radius: 6px; padding: .43rem .72rem; color: #25513c; background: #fff; min-height: 34px; font-size: .82rem; font-weight: 620; }
+.quiet:hover, .rowActions button:hover { background: #eef4f0; }
+.primary { background: #174d48; color: white; border-color: #174d48; }
+.primary:hover { background: #103b37; }
+.preview { display: flex; flex-wrap: wrap; gap: .35rem; }
+.preview span { display: inline-flex; gap: .32rem; align-items: baseline; border: 1px solid #dce5de; background: white; padding: .22rem .46rem; border-radius: 4px; font-size: .77rem; }
+.preview small { color: #64746b; font-size: .68rem; }
+.bottom { margin-top: .8rem; }
+.steps, .dates { display: grid; margin: .7rem 0; gap: .42rem; }
+.step, .dateRow { background: white; border: 1px solid #dce4de; border-radius: 7px; padding: .65rem; }
+.stepName { display: flex; flex: 1 1 12rem; gap: .62rem; align-items: center; min-width: 0; }
+.stepName span { color: #486554; font-size: .75rem; font-weight: 650; white-space: nowrap; }
+.stepName input, .stage input { font-weight: 600; color: #263a2c; }
+.rowActions { gap: .22rem; }
+.rowActions button { min-width: 30px; min-height: 30px; padding: .22rem .45rem; }
+.stepFields { margin-top: .5rem; }
+.stepFields label:not(.check) { width: 7rem; max-width: 100%; }
+.stepFields .check { display: inline-flex; gap: .35rem; align-items: center; align-self: end; padding-block: .6rem; font-weight: 500; }
+.stepFields .check input { accent-color: #174d48; width: auto; }
+.dateRow { display: grid; grid-template-columns: minmax(9rem, 1fr) auto; align-items: end; gap: .7rem; }
+.dateFields { flex-wrap: nowrap; align-items: end; }
+.dateFields label:nth-child(2) { width: 4.35rem; }
+.endDate { width: 5.6rem; font-variant-numeric: tabular-nums; }
+.endDate strong { display: flex; align-items: center; min-height: 36px; font-size: .79rem; color: #224936; font-weight: 600; }
+.changes { border-block: 1px solid #d6e3d9; padding: .55rem 0; }
+.changes summary { cursor: pointer; font-size: .81rem; font-weight: 625; }
+.changes > div { margin: .5rem .1rem; font-size: .8rem; }
+.changes ul { padding-left: 1rem; list-style: disc; font-size: .77rem; color: #52635b; }
+.success, .error { margin-top: .57rem; font-size: .82rem; }
+.success { color: #185a3c; }
+.error { color: #9b3029; }
+@media (max-width: 920px) {
+  .dateRow { grid-template-columns: 1fr; }
+}
+@media (max-width: 550px) {
+  .setup, .library { padding: .75rem; }
+  .heading, .bottom { align-items: flex-start; }
+  .dateFields { flex-wrap: wrap; }
+  .stepFields { gap: .4rem; }
+  .stepFields label:not(.check) { max-width: calc(50% - .3rem); }
+  .controls .label { width: 100%; }
+  .stepName { flex-basis: 100%; }
+}

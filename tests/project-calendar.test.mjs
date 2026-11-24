@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import test from 'node:test';
-import { weekBounds } from '../lib/weekly-report.ts';
-import { calendarHref, directoryGroupFor, projectDirectoryHref, projectHref, scheduleHref, workspaceSection } from '../lib/workspace-navigation.ts';
+import { calendarHref, directoryGroupFor, isActiveWorkspaceProject, parseDirectoryGroup, projectDirectoryHref, projectHref, scheduleHref, workspaceSection } from '../lib/workspace-navigation.ts';
 
 const hooks = registerHooks({ resolve(specifier, context, next) {
-  if (specifier === './competition-dates') {
-    return next(new URL('../lib/competition-dates.ts', import.meta.url).href, context);
+  if (specifier === './competition-dates' || specifier === './workspace-navigation') {
+    return next(specifier + '.ts', context);
   }
   return next(specifier, context);
 } });
+const { weekBounds } = await import('../lib/weekly-report.ts');
 const { buildCalendarEvents, calendarBounds, calendarMonthDays, eventsInRange, isCalendarDate,
   isOfficialCalendarTask, nearestCalendarDate, redateOfficialCalendarTasks, shiftCalendar } = await import('../lib/project-calendar.ts');
 const { generateScheduleTemplate } = await import('../lib/schedule-template.ts');
@@ -22,7 +22,11 @@ test('project management defaults to the directory and keeps submitted, terminal
   };
   assert.equal(route('tab=projects'), 'directory');
   assert.equal(route('tab=projects&group=completed'), 'directory');
-  assert.equal(projectDirectoryHref('completed'), '/?tab=projects&group=completed');
+  for (const group of ['candidate', 'completed', 'dropped']) {
+    assert.equal(projectDirectoryHref(group), '/?tab=projects&group=' + group);
+    assert.equal(parseDirectoryGroup(group), group);
+  }
+  assert.equal(parseDirectoryGroup('other'), 'active');
   assert.equal(route('tab=projects&section=calendar'), 'calendar');
   assert.equal(route('tab=projects&project=p'), 'calendar');
   assert.equal(route('tab=projects&project=p&task=t'), 'schedule');
@@ -32,11 +36,20 @@ test('project management defaults to the directory and keeps submitted, terminal
   for (const status of ['등록예정','등록완료','작업중','제출완료']) {
     assert.equal(directoryGroupFor({competitionData:{status}}), 'active');
   }
-  for (const status of ['입선','탈락','드롭']) {
+  for (const status of ['입선','탈락']) {
     assert.equal(directoryGroupFor({competitionData:{status}}), 'completed');
   }
   assert.equal(directoryGroupFor({competitionData:{status:'관심'}}), null);
-  assert.equal(directoryGroupFor({competitionData:{status:'관심', schedules:[{id:'started'}]}}), 'active');
+  assert.equal(directoryGroupFor({competitionData:{status:'관심',processTemplateId:'competition'}}), 'candidate');
+  const candidate = {competitionData:{status:'관심', schedules:[{id:'scheduled'}]}};
+  assert.equal(directoryGroupFor(candidate), 'candidate');
+  assert.equal(isActiveWorkspaceProject(candidate), false);
+  assert.equal(directoryGroupFor({competitionData:{status:'드롭',planning:{archived:true}}}), 'dropped');
+  assert.equal(directoryGroupFor({competitionData:{status:'드롭'}}), 'dropped');
+  const drop = {id:'stopped',outcome:'드롭'};
+  const general = {status:'작업중',workspaceKind:'project'};
+  assert.equal(directoryGroupFor({competitionData:{...general,planning:{archived:true,currentCloseout:drop.id,closeouts:[drop]}}}), 'dropped');
+  assert.equal(directoryGroupFor({competitionData:{...general,planning:{archived:false,currentCloseout:null,closeouts:[drop]}}}), 'active');
   assert.equal(directoryGroupFor({competitionData:{status:'작업중',workspaceKind:'office'}}), null);
   assert.equal(directoryGroupFor({competitionData:{status:'작업중',workspaceKind:'project'}}), 'active');
   assert.equal(directoryGroupFor({competitionData:{status:'작업중',workspaceKind:'project',planning:{archived:true}}}), 'completed');

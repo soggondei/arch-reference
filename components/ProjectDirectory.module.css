@@ -4,7 +4,7 @@
 .groups { display: flex; flex-wrap: wrap; gap: .25rem; }
 .toolbar button, .commonActions button { border-radius: 6px; padding: .5rem .8rem; font-size: .83rem; font-weight: 650; }
 .groups button { color: #4f625b; }
-.groups button[aria-pressed=true] { background: #dfece5; color: #164e3f; }
+.groups button[aria-selected=true] { background: #dfece5; color: #164e3f; }
 .groups span { margin-left: .15rem; font-variant-numeric: tabular-nums; }
 .primary { background: #174d48; color: white; }
 .primary:hover { background: #113f3b; }
@@ -13,7 +13,10 @@
 .listHeader small { font-size: .77rem; color: #53665e; margin-left: .2rem; font-weight: 550; }
 .listHeader input { width: min(100%, 12.5rem); }
 .cards { display: grid; gap: .65rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr)); }
-.card { min-width: 0; display: flex; flex-direction: column; gap: .6rem; height: 100%; padding: .85rem .95rem; border: 1px solid #d6dfda; border-radius: 9px; background: white; }
+.cards li { display: flex; flex-direction: column; }
+.card { min-width: 0; display: flex; flex: 1; flex-direction: column; gap: .6rem; padding: .85rem .95rem; border: 1px solid #d6dfda; border-radius: 9px; background: white; }
+.setup { align-self: start; padding: .4rem .15rem; color: #245a48; font-size: .8rem; font-weight: 650; }
+.setup:hover { text-decoration: underline; }
 .card:hover, .card:focus-visible { border-color: #759b8b; background: #f6faf7; }
 .cardMeta, .cardFooter, .common p, .empty { color: #55655e; font-size: .77rem; }
 .cardMeta { font-weight: 620; }

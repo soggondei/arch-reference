@@ -8,7 +8,7 @@ import {
 } from '@/lib/project-calendar';
 import { projectColor, projectColorName } from '@/lib/project-color';
 import { SCHEDULE_CATEGORY_LABEL, SCHEDULE_STATUS_LABEL, type Reference, type ScheduleStatus } from '@/lib/types';
-import { calendarHref, isActiveWorkspaceProject } from '@/lib/workspace-navigation';
+import { calendarHref, directoryGroupFor, directoryGroups, directoryLabels, isActiveWorkspaceProject, projectStatusLabel } from '@/lib/workspace-navigation';
 import ProjectCalendar from './ProjectCalendar';
 import styles from './ProjectScheduleWorkspace.module.css';
 
@@ -43,7 +43,7 @@ function periodLabel(view: CalendarView, date: string, start: string, end: strin
 
 function projectOption(project: Reference) {
   const data = project.competitionData;
-  const state = data?.workspaceKind ? (data.planning?.archived ? '종료' : undefined) : data?.status;
+  const state = data && data.workspaceKind !== 'office' ? projectStatusLabel(data) : undefined;
   return [project.title, state, projectColorName(project)].filter(Boolean).join(' · ');
 }
 
@@ -124,7 +124,10 @@ function ScheduleList({ projects, view, date, today, onNavigate, onOpenTask }: O
 export default function ProjectScheduleWorkspace({ projects, scope, layout, view, date, today, onScopeChange, onLayoutChange, onNavigate, onOpenTask, onCreateTask }: Props) {
   const selected = projects.find(project => project.id === scope);
   const active = useMemo(() => projects.filter(isActiveWorkspaceProject), [projects]);
-  const closed = useMemo(() => projects.filter(project => !isActiveWorkspaceProject(project)), [projects]);
+  const groups = useMemo(() => [
+    ...directoryGroups.map(group => ({ label: directoryLabels[group], items: projects.filter(p => directoryGroupFor(p) === group) })),
+    { label: '사무소 공통', items: projects.filter(p => p.competitionData?.workspaceKind === 'office') },
+  ].filter(group => group.items.length), [projects]);
   const visible = useMemo(() => selected ? [selected] : scope === 'all' ? projects : active, [selected, scope, projects, active]);
   const missing = scope !== 'all' && scope !== 'active' && !selected;
 
@@ -133,10 +136,11 @@ export default function ProjectScheduleWorkspace({ projects, scope, layout, view
       <label className={styles.scope}>프로젝트 범위
         <select aria-label="프로젝트 범위" value={scope} onChange={e => onScopeChange(e.target.value)}>
           <option value="active">진행 프로젝트 전체</option>
-          <option value="all">모든 프로젝트 (종료·드롭 포함)</option>
+          <option value="all">모든 프로젝트 (검토·완료·드롭 포함)</option>
           {missing && <option disabled value={scope}>찾을 수 없는 프로젝트</option>}
-          {active.length > 0 && <optgroup label="진행 중">{active.map(project => <option key={project.id} value={project.id}>{projectOption(project)}</option>)}</optgroup>}
-          {closed.length > 0 && <optgroup label="종료·드롭">{closed.map(project => <option key={project.id} value={project.id}>{projectOption(project)}</option>)}</optgroup>}
+          {groups.map(group => <optgroup label={group.label} key={group.label}>
+            {group.items.map(project => <option key={project.id} value={project.id}>{projectOption(project)}</option>)}
+          </optgroup>)}
         </select>
       </label>
       {selected && <Link className={styles.projectLink} href={calendarHref(selected.id, view, date)}>프로젝트 열기 →</Link>}

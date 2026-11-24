@@ -1,0 +1,39 @@
+.panel { color: #24352f; display: grid; gap: 1rem; padding: 1rem 0; min-width: 0; }
+.head, .tools, .entry, .buttons, .controls { display: flex; align-items: center; flex-wrap: wrap; gap: .55rem; }
+.head, .entry { justify-content: space-between; }
+.head h2 { font-size: 1.1rem; font-weight: 750; }
+.panel small { color: #566a62; font-size: .78rem; }
+.panel a { text-decoration: underline; text-underline-offset: 2px; color: #245d49; }
+.upload, .files li { border: 1px solid #d5e0d8; border-radius: 8px; padding: .9rem; }
+.upload { background: #f7f9f7; }
+.upload fieldset { display: grid; gap: .8rem; min-width: 0; }
+.panel label { display: grid; gap: .28rem; min-width: 0; font-size: .78rem; font-weight: 650; }
+.picker input { width: 100%; }
+.picker input::file-selector-button { background: #fff; border: 1px solid #b9c8bf; border-radius: 5px; margin-right: .55rem; padding: .4rem .6rem; cursor: pointer; }
+.controls { align-items: end; }
+.controls label { flex: 1 1 7rem; }
+.panel select, .tools input { width: 100%; min-width: 0; padding: .47rem; border: 1px solid #bfcfc4; border-radius: 5px; background: #fff; font-size: .8rem; }
+.panel button { cursor: pointer; }
+.panel button:disabled { cursor: default; opacity: .55; }
+.primary, .secondary, .buttons button, .tools button { border-radius: 5px; padding: .46rem .65rem; font-size: .8rem; font-weight: 650; }
+.primary { background: #174d48; color: #fff; }
+.secondary, .buttons button { border: 1px solid #c3d1c8; }
+.tools { gap: .45rem; }
+.tools div { display: flex; margin-right: auto; }
+.tools button[aria-pressed=true] { background: #e1ece4; color: #184e3f; }
+.tools select, .tools input { width: auto; max-width: 100%; }
+.empty { text-align: center; border: 1px dashed #c9d5cd; border-radius: 6px; color: #56675f; padding: 1.7rem .75rem; font-size: .85rem; }
+.files { display: grid; gap: .45rem; }
+.entry > div:first-child { display: grid; gap: .25rem; min-width: 0; }
+.entry strong { font-size: .91rem; overflow-wrap: anywhere; }
+.buttons { gap: .28rem; }
+.files form { margin-top: .85rem; }
+.notice, .error { font-size: .82rem; overflow-wrap: anywhere; }
+.error { color: #923728; }
+.notice { color: #225b41; }
+@media (max-width: 600px) {
+  .entry { align-items: flex-start; flex-direction: column; }
+  .tools div { width: 100%; }
+  .tools input { flex: 1; }
+  .controls > button { margin-top: .25rem; }
+}

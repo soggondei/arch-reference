@@ -7,8 +7,10 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEv
 import { isDroppedCompetition, SCHEDULE_CATEGORY_LABEL, SCHEDULE_STATUS_LABEL } from '@/lib/types';
 import type { OfficeSchedulePatch, ProjectActivityChange, Reference, ScheduleCategory, ScheduleItem, ScheduleStatus, TaskDates } from '@/lib/types';
 import ProjectCalendar from './ProjectCalendar';
+import ProjectFiles from './ProjectFiles';
 import ProjectScheduleWorkspace from './ProjectScheduleWorkspace';
 import ProjectDirectory from './ProjectDirectory';
+import { ProcessTemplateLibrary, ProjectProcessSetup } from './ProcessWorkspace';
 import ProjectColorPicker, { ProjectColorDot } from './ProjectColorPicker';
 import { projectColorName } from '@/lib/project-color';
 import { isCalendarDate, isOfficialCalendarTask, type CalendarView } from '@/lib/project-calendar';
@@ -16,8 +18,8 @@ import ProjectWeeklyReport from './ProjectWeeklyReport';
 import ProjectPlanning from './ProjectPlanning';
 import { useProjectSharedLogs } from '@/lib/project-shared-work';
 import ReferenceConnections from './ReferenceConnections';
-import { calendarHref, directoryGroupFor, isActiveWorkspaceProject as activeProject, isWorkspaceProject, projectDirectoryHref, projectHref, scheduleHref,
-  type ProjectSection, type ScheduleLayout, type ScheduleScope } from '@/lib/workspace-navigation';
+import { calendarHref, directoryGroups, directoryLabels, isActiveWorkspaceProject as activeProject, isWorkspaceProject, projectDirectoryHref, projectHref, projectLifecycleGroup, projectStatusLabel, scheduleHref,
+  type DirectoryGroup, type ProjectSection, type ScheduleLayout, type ScheduleScope } from '@/lib/workspace-navigation';
 import { weekBounds } from '@/lib/weekly-report';
 import styles from './OfficeWorkspace.module.css';
 
@@ -34,11 +36,12 @@ interface WorkspaceProps {
   calendarTaskProject?: string;
   scheduleLayout?: ScheduleLayout;
   scheduleScope?: ScheduleScope;
-  directoryGroup?: 'active' | 'completed';
+  directoryGroup?: DirectoryGroup;
   onActivity: (projectId: string, change: ProjectActivityChange) => Promise<void>;
   onUpdateTask: (refId: string, taskId: string, patch: OfficeSchedulePatch, previous?: TaskDates & OfficeSchedulePatch) => Promise<void>;
   onCreateProject: (name: string, pm: string, id: string) => Promise<string>;
   onCreateTask: (projectId: string | null, task: ScheduleItem) => Promise<string>;
+  onProcessSaved: (project: Reference) => void;
 }
 
 type TaskRow = { project: Reference; task: ScheduleItem };
@@ -88,7 +91,7 @@ function overdue(task: ScheduleItem, today: string, time: string) {
 function projectKind(project: Reference) {
   const data = project.competitionData!;
   if (data.workspaceKind === 'office') return '공통 업무';
-  if (data.workspaceKind === 'project') return data.planning?.archived ? '완료 · 일반 프로젝트' : '진행 · 일반 프로젝트';
+  if (data.workspaceKind === 'project') return projectStatusLabel(data) + ' · 일반 프로젝트';
   return data.status;
 }
 
@@ -375,7 +378,7 @@ function CreateForm({ type, context, projects, defaultProject, defaultDate, memb
 }
 
 export default function OfficeWorkspace({ view, refs, routeProject, routeTask, section = 'calendar', calendarView = 'month', calendarDate,
-  calendarTaskProject, scheduleLayout = 'calendar', scheduleScope = 'active', directoryGroup = 'active', onActivity, onUpdateTask, onCreateProject, onCreateTask }: WorkspaceProps) {
+  calendarTaskProject, scheduleLayout = 'calendar', scheduleScope = 'active', directoryGroup = 'active', onActivity, onUpdateTask, onCreateProject, onCreateTask, onProcessSaved }: WorkspaceProps) {
   const member = useSyncExternalStore(subscribeMember, readMember, () => '');
   const [clock, setClock] = useState(() => new Date());
   const today = dateFormatter.format(clock);
@@ -393,13 +396,14 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
   const [form, setForm] = useState<{ view: OfficeView; type: 'task' | 'project'; date?: string; context?: FormContext; location: string } | null>(null);
   const [notice, setNotice] = useState('');
   const [monday, sunday] = weekBounds(today);
-  const projects = useMemo(() => refs.filter(isWorkspaceProject).sort((a, b) => {
+  const projects = useMemo(() => refs.filter(p => isWorkspaceProject(p) ||
+    (view === 'projects' && p.id === routeProject && Boolean(p.competitionData))).sort((a, b) => {
     const rank = (p: Reference) => activeProject(p) ? (p.competitionData?.status === '작업중' ? 0 : 1) : 2;
     return rank(a) - rank(b) || a.title.localeCompare(b.title, 'ko');
-  }), [refs]);
+  }), [refs, view, routeProject]);
   const pickerGroups = useMemo(() => [
-    { label: '진행 프로젝트', items: projects.filter(p => directoryGroupFor(p) === 'active') },
-    { label: '완료 프로젝트', items: projects.filter(p => directoryGroupFor(p) === 'completed') },
+    ...directoryGroups.map(group => ({ label: directoryLabels[group],
+      items: projects.filter(p => p.competitionData && p.competitionData.workspaceKind !== 'office' && projectLifecycleGroup(p.competitionData) === group) })),
     { label: '사무소 공통', items: projects.filter(p => p.competitionData?.workspaceKind === 'office') },
   ].filter(group => group.items.length), [projects]);
   const rows = useMemo(() => projects.flatMap(project =>
@@ -414,6 +418,7 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
   const portfolio = isCalendar && !routeProject;
   const currentProject = portfolio || directory ? undefined : projects.find(p => selectedId === null ? p.competitionData?.workspaceKind === 'office' : p.id === selectedId)
     ?? (routeProject ? undefined : projects[0]);
+  const currentGroup = currentProject?.competitionData ? projectLifecycleGroup(currentProject.competitionData) : 'active';
   const calendarProjects = useMemo(() => portfolio ? (scheduleDesk && scheduleScope === 'all' ? projects : projects.filter(activeProject))
     : currentProject ? [currentProject] : [], [projects, portfolio, currentProject, scheduleDesk, scheduleScope]);
   const calendarRow = isCalendar && routeTask ? rows.find(({ project, task }) => task.id === routeTask &&
@@ -480,6 +485,8 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
           if (view === 'projects' || scheduleDesk) {
             if (directory && id && form?.context === 'commonTask') {
               pushLocation(scheduleHref(id, 'day', endDate ?? today, 'list'));
+            } else if (id && formType === 'project') {
+              navigateProject(id, 'process');
             } else if (directory && id) {
               navigateProject(id, 'calendar');
             } else if (id && isCalendar) {
@@ -521,9 +528,10 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
           {{ mine: '내 담당', unassigned: '미배정', all: '전체' }[mode]}
         </button>)}
       </div>}
-      {directory ? <ProjectDirectory projects={projects} group={directoryGroup}
+      {directory ? <><ProjectDirectory projects={projects} group={directoryGroup}
         onGroupChange={group => pushLocation(projectDirectoryHref(group))} onOpenProject={id => navigateProject(id, 'calendar')}
         onCreateProject={() => openForm('project', undefined, 'generalProject')} onCreateGeneralTask={() => openForm('task', today, 'commonTask')} />
+        <ProcessTemplateLibrary projects={projects} onSaved={onProcessSaved} /></>
         : scheduleDesk ? <section className={styles.agenda} aria-label="프로젝트 일정 관리">
           <ProjectScheduleWorkspace projects={projects} scope={routeProject ?? scheduleScope} layout={scheduleLayout} view={calendarView} date={selectedDate} today={today}
             onScopeChange={choice => pushLocation(scheduleHref(choice === 'active' || choice === 'all' ? undefined : choice, calendarView, selectedDate,
@@ -550,9 +558,8 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
         </aside>}
         <section className={styles.agenda}>
           {portfolio && <div className={styles.projectInfo}><h2>진행 프로젝트 전체</h2><p>진행 중인 프로젝트와 사무소 공통 업무</p></div>}
-          {view === 'projects' && currentProject && <div key={currentProject.id} className={styles.projectInfo}>
-            <Link href={projectDirectoryHref(activeProject(currentProject) ? 'active' : 'completed')} scroll={false}>
-              ← {activeProject(currentProject) ? '진행' : '완료'} 프로젝트 목록</Link>
+          {view === 'projects' && currentProject && <div key={'header/' + currentProject.id} className={styles.projectInfo}>
+            <Link href={projectDirectoryHref(currentGroup)} scroll={false}>← {directoryLabels[currentGroup]} 목록</Link>
             <p>{projectKind(currentProject)}{currentProject.competitionData?.pm && ' · PM ' + currentProject.competitionData.pm}</p>
             <h2><ProjectColorDot project={currentProject} />{currentProject.title}</h2>
             <ProjectColorPicker project={currentProject} projects={projects} onActivity={onActivity} />
@@ -561,7 +568,8 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
             {!currentProject.competitionData?.workspaceKind && <Link href={'/reference/' + encodeURIComponent(currentProject.id)}>공모 상세 보기 →</Link>}
           </div>}
           {view === 'projects' && currentProject && <nav className={styles.projectSections} aria-label="프로젝트 상세 메뉴">
-            {([['calendar','캘린더'], ['schedule','업무 일정'], ['report','주간 리포트'], ['planning','계획·회고'], ['references','레퍼런스']] as const).filter(([key]) => key !== 'planning' || currentProject.competitionData?.workspaceKind !== 'office').map(([key, label]) =>
+            {([['calendar','캘린더'], ['schedule','업무 일정'], ['process','진행 설정'], ['files','파일'], ['report','주간 리포트'], ['planning','계획·회고'], ['references','레퍼런스']] as const).filter(([key]) =>
+              !['planning','process','files'].includes(key) || currentProject.competitionData?.workspaceKind !== 'office').map(([key, label]) =>
               <Link key={key} href={projectHref(currentProject.id, key)} scroll={false} aria-current={section === key ? 'page' : undefined}>{label}</Link>
             )}
           </nav>}
@@ -569,9 +577,15 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
             <ProjectCalendar projects={calendarProjects} portfolio={portfolio} today={today} view={calendarView} date={selectedDate}
               onNavigate={(period, day) => goCalendar(routeProject, period, day)} onOpenTask={openCalendarTask} onCreateTask={day => openForm('task', day)} />}
             {selectedDetail}</>
+            : view === 'projects' && currentProject && section === 'process' && currentProject.competitionData?.workspaceKind !== 'office'
+            ? <ProjectProcessSetup key={currentProject.id} project={currentProject} onSaved={onProcessSaved} />
             : view === 'projects' && currentProject && (section === 'report' || section === 'planning')
             ? <ProjectWorkView key={currentProject.id} project={currentProject} relatedProjects={projects} section={section} today={today} onActivity={onActivity}
                 onOpenTask={taskId => navigateProject(currentProject.id, 'schedule', taskId)} />
+            : view === 'projects' && currentProject && section === 'files'
+            ? currentProject.competitionData?.workspaceKind === 'office'
+              ? <p className={styles.empty}>파일을 관리할 프로젝트를 목록에서 선택해 주세요.</p>
+              : <ProjectFiles key={'files/' + currentProject.id} project={currentProject} />
             : view === 'projects' && currentProject && section === 'references'
               ? <ReferenceConnections key={currentProject.id} context="project" anchor={currentProject} refs={refs} onActivity={onActivity} />
               : <><div className={styles.listTitle}>

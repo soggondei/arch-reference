@@ -1,4 +1,5 @@
 import type { CompetitionData, TaskFeedback, WorkLog } from './types';
+import { isActiveWorkspaceProject } from './workspace-navigation';
 
 // Inputs are Korean calendar dates, not timestamps. UTC arithmetic keeps the
 // Monday/Sunday boundaries independent of the device's local time zone.
@@ -72,8 +73,7 @@ export function weeklyDecisions(data: CompetitionData | undefined, day: string, 
     const dates = task.completedDates?.filter(date => date >= start && date <= end).sort();
     return dates?.length ? [{ task, date: dates[dates.length - 1] }] : [];
   }).sort((a, b) => a.date.localeCompare(b.date));
-  const live = start <= today && today <= end && !data?.planning?.archived &&
-    (Boolean(data?.workspaceKind) || !['드롭', '입선', '탈락'].includes(data?.status ?? ''));
+  const live = start <= today && today <= end && isActiveWorkspaceProject({ competitionData: data });
   const open = live ? ordered.filter(task => task.status !== 'done' && task.status !== 'cancelled') : [];
   return {
     completed, live, waiting: open.filter(task => task.waitingFor?.trim()),

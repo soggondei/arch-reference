@@ -159,6 +159,7 @@ export default function ReferencePage() {
       if (updated.status === '등록예정' || updated.status === '등록완료') {
         await syncCompetitionRegistration(ref_, updated);
       }
+      if (updated.status === '등록완료' && !updated.processTemplateId) router.push(projectHref(id, 'process'));
     } catch {
       setNotionSyncMsg(null);
       setStatusError(statusSaved ? '공모 상태는 저장했습니다. 일정 동기화를 다시 시도해 주세요.' : '공모 상태를 저장하지 못했습니다. 다시 시도해 주세요.');
@@ -169,12 +170,7 @@ export default function ReferencePage() {
 
   async function syncCompetitionRegistration(project: Reference, updated: CompetitionData) {
     if (updated.status === '등록완료' && (!updated.schedules || updated.schedules.length === 0)) {
-      const schedules = generateScheduleTemplate({
-        submissionDate: updated.submissionDate,
-        registrationDate: updated.registrationDate,
-        announcementDate: updated.announcementDate,
-        resultDate: updated.resultDate,
-      });
+      const schedules = generateScheduleTemplate(updated, null);
       if (schedules.length > 0) {
         const withSchedules = await updateCompetitionStatus(id, { ...updated, schedules }, updated);
         showSavedCompetition(withSchedules);
