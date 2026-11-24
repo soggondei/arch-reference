@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildWeeklyReport, durationLabel, weekBounds, weeklyDecisions } from '../lib/weekly-report.ts';
+import { registerHooks } from 'node:module';
+const hooks = registerHooks({ resolve(specifier, context, next) {
+  return next(specifier === './workspace-navigation' ? specifier + '.ts' : specifier, context);
+} });
+const { buildWeeklyReport, durationLabel, weekBounds, weeklyDecisions } = await import('../lib/weekly-report.ts');
+hooks.deregister();
 
 test('weekly decisions use recorded completion days and only show current open actions for active projects', () => {
   const base = {taskName:'평면',endDate:'2026-11-25',category:'design',status:'planned'};
@@ -16,6 +21,7 @@ test('weekly decisions use recorded completion days and only show current open a
   assert.equal(now.nextDelivery.id,'delivery');
   assert.equal(weeklyDecisions(data,'2026-11-15','2026-11-23').live,false);
   assert.equal(weeklyDecisions({...data,status:'드롭'},'2026-11-23','2026-11-23').live,false);
+  assert.equal(weeklyDecisions({...data,status:'관심'},'2026-11-23','2026-11-23').live,false);
   assert.equal(weeklyDecisions({...data,workspaceKind:'project',planning:{archived:true}},'2026-11-23','2026-11-23').live,false);
 });
 

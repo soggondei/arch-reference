@@ -8,6 +8,8 @@ import { attendanceDate } from './attendance';
 import { applyProjectActivity } from './project-activity';
 import { applyPlanning, assignedPhase, trackCompetitionTransition } from './project-planning';
 import { suggestedProjectColor } from './project-color';
+import { applyProcess, checkedProcessTemplates, DEFAULT_PROCESS_LIBRARY } from './process-template';
+import type { ProcessLibrary, ProcessRow, ProcessTemplate } from './process-template';
 import { isWorkspaceProject } from './workspace-navigation';
 
 // ── Row mappers ─────────────────────────────────────────────────────────────
@@ -97,7 +99,7 @@ async function assignProjectColor(id: string, competitionData: CompetitionData):
   const existing: Pick<Reference, 'id' | 'competitionData'>[] = [];
   const pageSize = 200;
   // Select only the color and active/archived markers of workspace projects.
-  const scope = ['competition_data->>workspaceKind.not.is.null', 'competition_data->>status.neq.관심',
+  const scope = ['competition_data->>workspaceKind.not.is.null', 'competition_data->>status.neq.관심', 'competition_data->>processTemplateId.not.is.null',
     ...['schedules', 'workLogs', 'feedback', 'referenceLinks'].map(key => 'competition_data->' + key + '->0.not.is.null')].join(',');
   for (let offset = 0; ; offset += pageSize) {
     const { data, error } = await supabase.from('refs')
@@ -239,6 +241,46 @@ function officeProject(id: string, title: string, kind: 'project' | 'office', pm
 async function insertOfficeRecord(ref: Reference) {
   const { error } = await supabase.from('refs').upsert(refRow(ref), { onConflict: 'id', ignoreDuplicates: true });
   if (error) throw error;
+}
+
+export async function getProcessLibrary(): Promise<ProcessLibrary> {
+  const { data, error } = await supabase.from('refs').select('library:competition_data->processLibrary')
+    .eq('id', COMMON_OFFICE_ID).maybeSingle();
+  if (error) throw error;
+  return (data?.library as ProcessLibrary | null) ?? structuredClone(DEFAULT_PROCESS_LIBRARY);
+}
+
+function sameTemplates(left: ProcessTemplate[], right: ProcessTemplate[]) {
+  // JSONB does not preserve property order. Check normalized fields and preserve
+  // array order because both the type selector and the setup form use it.
+  return JSON.stringify(checkedProcessTemplates(left)) === JSON.stringify(checkedProcessTemplates(right));
+}
+
+export async function saveProcessLibrary(previousRevision: number, templates: ProcessTemplate[]): Promise<ProcessLibrary> {
+  const checked = checkedProcessTemplates(templates);
+  await insertOfficeRecord(officeProject(COMMON_OFFICE_ID, '사무소 공통 업무', 'office'));
+  const updated = await editCompetition(COMMON_OFFICE_ID, current => {
+    const previous = current.processLibrary ?? DEFAULT_PROCESS_LIBRARY;
+    if (sameTemplates(previous.templates, checked)) return current;
+    if (previous.revision !== previousRevision) throw new Error('기본 프로세스가 변경되었습니다. 최신 버전을 불러와 다시 수정해 주세요.');
+    return { ...current, processLibrary: { revision: previous.revision + 1, templates: checked } };
+  });
+  return updated.competitionData?.processLibrary ?? structuredClone(DEFAULT_PROCESS_LIBRARY);
+}
+
+export async function saveProjectProcess(projectId: string, template: ProcessTemplate, rows: ProcessRow[], previousRows: ProcessRow[],
+  options: { expectedTemplateId?: string; startProject?: boolean } = {}): Promise<Reference> {
+  const library = await getProcessLibrary();
+  const latest = library.templates.find(entry => entry.id === template.id);
+  if (!latest || !sameTemplates([latest], [template])) throw new Error('기본 프로세스가 변경되었습니다. 최신 버전을 불러온 후 일정을 확인해 주세요.');
+  return editCompetition(projectId, current => {
+    if ('expectedTemplateId' in options && current.processTemplateId !== options.expectedTemplateId && current.processTemplateId !== latest.id) {
+      throw new Error('이 프로젝트의 프로세스 유형이 변경되었습니다. 다시 열어 확인해 주세요.');
+    }
+    if (!current.workspaceKind && current.status === '관심' && !options.startProject) throw new Error('먼저 프로젝트 진행을 시작해 주세요.');
+    const next = applyProcess(current, latest, rows, previousRows);
+    return options.startProject && !current.workspaceKind && current.status === '관심' ? { ...next, status: '작업중' } : next;
+  });
 }
 
 export async function createOfficeProject(title: string, pm: string | undefined, id: string): Promise<Reference> {

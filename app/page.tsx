@@ -9,7 +9,7 @@ import { autoTag } from '@/lib/auto-tag';
 import { generateScheduleTemplate } from '@/lib/schedule-template';
 import { autoSyncSchedulesToNotion } from '@/lib/notion-schedule-client';
 import { deadlineLabel, getDDay } from '@/lib/competition-dates';
-import { workspaceSection } from '@/lib/workspace-navigation';
+import { parseDirectoryGroup, projectHref, workspaceSection } from '@/lib/workspace-navigation';
 import ReferenceCard from '@/components/ReferenceCard';
 import FilterPanel from '@/components/FilterPanel';
 import FilterSheet from '@/components/FilterSheet';
@@ -995,6 +995,7 @@ export default function Home() {
 }
 
 function WorkspacePage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const tab = NAV_ITEMS.find(([key]) => key !== 'attendance' && key === searchParams.get('tab'))?.[0] ?? 'office';
   const calendarView = searchParams.get('view');
@@ -1202,15 +1203,10 @@ function WorkspacePage() {
     if (!ref?.competitionData) return;
     syncingIds.current.add(id);
 
-    // 1. 스케줄 생성 (동기 - DB 저장 전)
+    // Official milestones come from the announcement. Internal dates are confirmed in 진행 설정.
     let cd: CompetitionData = { ...ref.competitionData, status };
     if (status === '등록완료' && (!cd.schedules || cd.schedules.length === 0)) {
-      const schedules = generateScheduleTemplate({
-        submissionDate: cd.submissionDate,
-        registrationDate: cd.registrationDate,
-        announcementDate: cd.announcementDate,
-        resultDate: cd.resultDate,
-      });
+      const schedules = generateScheduleTemplate(cd, null);
       if (schedules.length > 0) cd = { ...cd, schedules };
     }
 
@@ -1272,6 +1268,8 @@ function WorkspacePage() {
       setSyncNotice('공모 상태를 저장하지 못했습니다. 다시 시도해 주세요.');
       return;
     }
+
+    if (status === '등록완료' && !cd.processTemplateId) router.push(projectHref(id, 'process'));
 
     // 4. Notion 스케줄 동기화 (백그라운드 - cd 캡처해서 stale closure 방지)
     const resumingWithoutRegistration = isDroppedCompetition(ref.competitionData) && status !== '등록예정' && status !== '등록완료';
@@ -1425,13 +1423,13 @@ function WorkspacePage() {
         {isOfficeView ? (
           !loaded ? <p role="status" className="py-8 text-sm text-zinc-500">업무 일정을 불러오는 중…</p> :
           loadError && !refs.length ? null :
-          <OfficeWorkspace view={tab} refs={refs} onUpdateTask={handleUpdateTask} onCreateProject={handleCreateProject}
+          <OfficeWorkspace view={tab} refs={refs} onUpdateTask={handleUpdateTask} onCreateProject={handleCreateProject} onProcessSaved={upsertWorkspaceRef}
             routeProject={searchParams.get('project') ?? undefined} routeTask={searchParams.get('task') ?? undefined}
             calendarView={calendarView === 'day' || calendarView === 'week' || calendarView === 'year' ? calendarView : 'month'}
             calendarDate={searchParams.get('date') ?? undefined} calendarTaskProject={searchParams.get('taskProject') ?? undefined}
             scheduleLayout={searchParams.get('layout') === 'list' ? 'list' : 'calendar'}
             scheduleScope={searchParams.get('scope') === 'all' ? 'all' : 'active'}
-            directoryGroup={searchParams.get('group') === 'completed' ? 'completed' : 'active'}
+            directoryGroup={parseDirectoryGroup(searchParams.get('group'))}
             section={workspaceSection(tab, searchParams)}
             onActivity={async (id, change) => { upsertWorkspaceRef(await saveProjectActivity(id, change)); }}
             onCreateTask={async (projectId, task) => { const saved = await addOfficeTask(projectId, task); upsertWorkspaceRef(saved); return saved.id; }} />
