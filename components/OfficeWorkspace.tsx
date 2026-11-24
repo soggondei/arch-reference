@@ -567,7 +567,7 @@ export default function OfficeWorkspace({ view, refs, routeProject, routeTask, s
             {activeProject(currentProject) && <p className={styles.next}>다음 마감 <strong>{nextTask ? nextTask.taskName + ' · ' + dueLabel(nextTask) : '예정 없음'}</strong></p>}
             {!currentProject.competitionData?.workspaceKind && <Link href={'/reference/' + encodeURIComponent(currentProject.id)}>공모 상세 보기 →</Link>}
           </div>}
-          {view === 'projects' && currentProject && <nav className={styles.projectSections} aria-label="프로젝트 상세 메뉴">
+          {view === 'projects' && currentProject && <nav className={styles.projectSections} aria-label="프로젝트 상세 메뉴"><Link href={"/work-register?project="+encodeURIComponent(currentProject.id)}>업무대장</Link>
             {([['calendar','캘린더'], ['schedule','업무 일정'], ['process','진행 설정'], ['files','파일'], ['report','주간 리포트'], ['planning','계획·회고'], ['references','레퍼런스']] as const).filter(([key]) =>
               !['planning','process','files'].includes(key) || currentProject.competitionData?.workspaceKind !== 'office').map(([key, label]) =>
               <Link key={key} href={projectHref(currentProject.id, key)} scroll={false} aria-current={section === key ? 'page' : undefined}>{label}</Link>
