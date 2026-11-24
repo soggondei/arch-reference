@@ -2,7 +2,7 @@ import { NextRequest,NextResponse } from 'next/server';
 import { createHash,randomBytes } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { database,deviceKey,json,readPersonalPost,isUuid } from '../_personal';
-import { applyChange,caseFields,templateFields,isValues,resources, type Catalog,type WorkCase } from '@/lib/work-register';
+import { applies,applyChange,caseFields,templateFields,isValues,resources, type Catalog,type WorkCase } from '@/lib/work-register';
 export const dynamic='force-dynamic';
 async function run(req:NextRequest,input:Record<string,unknown>){
  const key=deviceKey(req);if(!key)return json({error:'내 근태에서 대표자 기기를 연결한 후 이용하세요.'},403);
@@ -15,8 +15,12 @@ async function run(req:NextRequest,input:Record<string,unknown>){
  if(action==='asset'){const f=resources.find(x=>x.key===args.asset);if(!f)return json({error:'자료 없음'},404);const encoded=await rpc('asset',{asset:f.key});return new Response(Buffer.from(encoded,'base64'),{headers:{'Cache-Control':'private, no-store','Content-Type':'application/octet-stream','Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent(f.name+'.'+f.ext)}});}
  if(action==='catalog'||action==='get'||action==='list')return json(await rpc(action,{after:Number(args.after||0)}));
  if(action==='template')return json(await rpc('template',{templateId:args.templateId,version:args.version,template:templateFields(args)}));
- if(action==='create'){const catalog:Catalog=await rpc('catalog');const t=catalog.templates.find(x=>x.id===args.templateId);if(!t)return json({error:'업무 유형을 선택하세요.'},400);return json(await rpc('create',{templateId:t.id,data:caseFields(args,!!t.body.special)}));}
+ if(action==='create'){const catalog:Catalog=await rpc('catalog');const t=catalog.templates.find(x=>x.id===args.templateId);if(!t)return json({error:'업무 유형을 선택하세요.'},400);return json(await rpc('create',{templateId:t.id,data:caseFields(args,t.body)}));}
  if(['prepare','download','finish','fileArchive','fileRestore'].includes(action)){
+ if(action==='prepare'){
+   const c:WorkCase=await rpc('get');
+   if(!c.blueprint.docs.some(d=>d.id===args.doc&&applies(d,c.blueprint,c.data.details)))return json({error:'현재 경로의 서류에 첨부하세요.'},400);
+ }
  const ticket=randomBytes(32).toString('hex');const result=await rpc(action,{...args,ticketHash:createHash('sha256').update(ticket).digest('hex')});
  if(!result.path)return json(result);
  const storage=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,{global:{headers:{'x-lv-register-ticket':ticket,'X-Client-Info':'lv-register-ticket/'+ticket}},auth:{persistSession:false,autoRefreshToken:false}}).storage.from('lv-work-register');

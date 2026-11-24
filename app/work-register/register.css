@@ -1,1 +1,18 @@
 .workreg{color:#202d29;background:#f5f7f5;min-height:100vh}.workreg header{background:#fff;border-bottom:1px solid #d9dfdb;padding:18px max(5vw,20px);display:flex;align-items:center;gap:32px;flex-wrap:wrap}.workreg header>a{font-size:22px;font-weight:800}.workreg nav,.workreg .regtabs,.workreg .filters,.workreg .filerow{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.workreg main{max-width:1100px;padding:32px 20px 64px;margin:auto}.workreg h1{font-size:32px;font-weight:750;margin:0 0 18px}.workreg h2{font-size:20px;font-weight:700;margin:0 0 14px}.workreg .regtabs{margin:18px 0}.workreg button,.workreg input:not([type=checkbox]),.workreg select,.workreg textarea{border:1px solid #bac9c0;background:white;border-radius:5px;padding:7px 10px}.workreg button{cursor:pointer}.workreg button:disabled{opacity:.5}.workreg .primary,.workreg button[aria-pressed=true]{background:#235443;color:white}.workreg .regcard{background:white;border:1px solid #d5dfd8;border-radius:8px;padding:20px;margin:16px 0}.workreg .regrow,.workreg .filerow{padding:12px 0;border-top:1px solid #e0e5df}.workreg summary{cursor:pointer}.workreg summary span{float:right}.workreg .regform{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0 18px}.workreg .regform label{display:grid;gap:5px;font-size:14px}.workreg .wide{grid-column:1/-1}.workreg textarea{min-height:72px}.workreg p{font-size:15px;color:#536257;margin:8px 0;white-space:pre-wrap}.workreg .badge{display:inline-block;padding:2px 7px;background:#edf1ee;color:#39483b;border-radius:4px}.workreg .law{background:#e1efde;color:#27522d}.workreg .draft{background:#fff0cc;color:#775213}.workreg .alert{background:#fbefe5;padding:12px}.workreg a:hover{text-decoration:underline}.workreg .source{display:inline-block;margin:12px 14px 0 0}.workreg .filerow a,.workreg nav a[aria-current]{color:#215c43;font-weight:650}@media(max-width:600px){.workreg .regform{grid-template-columns:1fr}.workreg header{gap:9px}.workreg nav{font-size:14px}.workreg .regcard{padding:14px}.workreg input,.workreg select{max-width:100%}}
+
+.workreg .workflow-fields {min-width:0; padding:18px 0; border-block:1px solid #d5dfd8}
+.workreg h3 {font-size:17px; font-weight:700; margin:0 0 6px}
+.workreg .route-preview {background:#f3f6f3; padding:14px 16px; border-radius:6px; margin:14px 0 4px}
+.workreg .route-preview h3 {font-size:15px; display:flex; gap:8px; align-items:baseline; flex-wrap:wrap}
+.workreg .route-preview small {color:#476754; font-size:13px; font-weight:500}
+.workreg .route-preview ol {list-style:none; display:flex; flex-wrap:wrap; gap:6px; padding:0; margin:12px 0}
+.workreg .route-preview ol li {font-size:13px; border:1px solid #d2dfd5; background:#fff; border-radius:4px; padding:4px 8px}
+.workreg .route-preview li[aria-current=step] {background:#235443; color:#fff; border-color:#235443}
+.workreg .route-preview summary,.workreg .previous-records>summary,.workreg .template-preview>summary {font-weight:600; font-size:14px; padding:6px 0}
+.workreg .preview-lists {display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); gap:14px; margin:10px 0}
+.workreg .preview-lists ul {list-style:disc; padding-left:18px; color:#46574b; font-size:14px}
+.workreg .flow-advice,.workreg .stage-choice {border-left:3px solid #48795b; padding:6px 12px; margin:10px 0}
+.workreg .flow-links {display:flex; gap:7px 16px; flex-wrap:wrap; margin-top:12px; color:#215c43; font-size:13px}
+.workreg .flow-links a {text-decoration:underline; text-underline-offset:3px}
+.workreg .previous-records,.workreg .template-preview {margin:10px 0}
+.workreg .regform > * {min-width:0}
