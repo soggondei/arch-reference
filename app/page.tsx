@@ -1002,8 +1002,8 @@ function WorkspacePage() {
   const tab = NAV_ITEMS.find(([key]) => key !== 'attendance' && key !== 'register' && key === requestedTab)?.[0] ?? 'office';
 
   useEffect(() => {
-    if (requestedTab === 'bids') router.replace('/', { scroll: false });
-  }, [requestedTab, router]);
+    if (requestedTab === 'bids') window.location.replace('/');
+  }, [requestedTab]);
   const calendarView = searchParams.get('view');
   const isOfficeView = tab === 'office' || tab === 'projects' || tab === 'schedule' || tab === 'tasks';
   const [refs, setRefs] = useState<Reference[]>([]);
