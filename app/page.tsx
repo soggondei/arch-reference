@@ -398,6 +398,7 @@ function ChangwonView(props: {
 
   return (
     <div className="flex-1 min-w-0">
+      <h1 className="mb-4 text-xl font-bold text-zinc-900">경상남도 입찰정보</h1>
       {props.loaded && !props.error && (
         <div className="mb-4 text-sm text-zinc-600 bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-3">
           <p className="mb-2 font-semibold">용역 · 건축설계 · 경상남도</p>
@@ -986,8 +987,8 @@ function BookmarkletHandler({ onPrefill }: { onPrefill: (data: Record<string, st
 
 const NAV_ITEMS = [
   ['office', '사무소 홈'], ['projects', '프로젝트 관리'], ['register','업무대장'], ['schedule', '프로젝트 일정'], ['tasks', '내 업무'], ['attendance', '내 근태'],
-  ['refs', '레퍼런스'], ['competitions', '공모전'], ['bids', '입찰정보'],
-  ['changwon', '경상남도'], ['links', '링크'],
+  ['refs', '레퍼런스'], ['competitions', '공모전'],
+  ['changwon', '경상남도 입찰정보'], ['links', '링크'],
 ] as const;
 
 export default function Home() {
@@ -997,7 +998,12 @@ export default function Home() {
 function WorkspacePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const tab = NAV_ITEMS.find(([key]) => key !== 'attendance' && key !== 'register' && key === searchParams.get('tab'))?.[0] ?? 'office';
+  const requestedTab = searchParams.get('tab');
+  const tab = NAV_ITEMS.find(([key]) => key !== 'attendance' && key !== 'register' && key === requestedTab)?.[0] ?? 'office';
+
+  useEffect(() => {
+    if (requestedTab === 'bids') router.replace('/', { scroll: false });
+  }, [requestedTab, router]);
   const calendarView = searchParams.get('view');
   const isOfficeView = tab === 'office' || tab === 'projects' || tab === 'schedule' || tab === 'tasks';
   const [refs, setRefs] = useState<Reference[]>([]);
@@ -1019,12 +1025,7 @@ function WorkspacePage() {
   const [bidsLoaded, setBidsLoaded] = useState(false);
   const [bidsError, setBidsError] = useState('');
   const bidsLoading = useRef(false);
-  const [bidStatusFilter, setBidStatusFilter] = useState<string>('공고중');
   const [participations, setParticipations] = useState<Record<string, BidParticipation | undefined>>({});
-  const [participationFilter, setParticipationFilter] = useState<ParticipationFilter>('전체');
-  const [bidSearchQuery, setBidSearchQuery] = useState('');
-  const [bidRegionFilter, setBidRegionFilter] = useState('전체');
-  const [bidAgencyTypeFilter, setBidAgencyTypeFilter] = useState<AgencyType | '전체'>('전체');
   const [changwonStatusFilter, setChangwonStatusFilter] = useState<string>('전체');
   const [changwonParticipationFilter, setChangwonParticipationFilter] = useState<ParticipationFilter>('전체');
   const [changwonSearchQuery, setChangwonSearchQuery] = useState('');
@@ -1189,7 +1190,7 @@ function WorkspacePage() {
   }, [bidsLoaded, bidsError]);
 
   useEffect(() => {
-    if (tab !== 'bids' && tab !== 'changwon') return;
+    if (tab !== 'changwon') return;
     if (!bidsLoaded && !bidsError) loadBidsIfNeeded();
     const refresh = () => { if (document.visibilityState === 'visible') loadBidsIfNeeded(true); };
     const timer = window.setInterval(refresh, 5 * 60 * 1000);
@@ -1547,25 +1548,6 @@ function WorkspacePage() {
             onStatusChange={handleCompetitionStatusChange}
             onDelete={handleDelete}
             onAutoFill={handleAutoFill}
-          />
-        ) : tab === 'bids' ? (
-          <BidsView
-            bids={bids}
-            loaded={bidsLoaded}
-            error={bidsError}
-            onReload={() => loadBidsIfNeeded(true)}
-            statusFilter={bidStatusFilter}
-            onStatusFilter={setBidStatusFilter}
-            participations={participations}
-            participationFilter={participationFilter}
-            onParticipationFilter={setParticipationFilter}
-            onParticipationChange={handleParticipationChange}
-            searchQuery={bidSearchQuery}
-            onSearchQuery={setBidSearchQuery}
-            regionFilter={bidRegionFilter}
-            onRegionFilter={setBidRegionFilter}
-            agencyTypeFilter={bidAgencyTypeFilter}
-            onAgencyTypeFilter={setBidAgencyTypeFilter}
           />
         ) : tab === 'changwon' ? (
           <ChangwonView
